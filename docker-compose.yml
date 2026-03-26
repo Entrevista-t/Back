@@ -4,7 +4,9 @@ services:
     container_name: entrevistatt_api_dev
     ports:
       - "8000:8000"
-    
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - .:/app
     
