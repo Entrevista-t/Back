@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from database import get_db, engine, Base
 
 app = FastAPI(
     title="Entrevistat't API",
@@ -119,3 +122,13 @@ def get_questions(
             "Explica'm un repte tècnic que hagis superat."
         ]
     }
+
+@app.get("/test-db")
+def test_db_connection(db: Session = Depends(get_db)):
+    try:
+        # Fem una consulta SQL purament de prova
+        result = db.execute(text("SELECT 1")).scalar()
+        if result == 1:
+            return {"status": "Connexió a PostgreSQL perfecta! 🎉"}
+    except Exception as e:
+        return {"status": "Error connectant a la BD", "detall": str(e)}
