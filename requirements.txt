@@ -13,6 +13,6 @@ openai-whisper
 spacy
 sentence-transformers
 scikit-learn
-opencv-python
+opencv-python-headless
 mediapipe
 deepface
