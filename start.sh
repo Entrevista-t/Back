@@ -11,7 +11,7 @@ CONTAINER_DEBUG="entrevistatt_api_debug"
 API_PORT="8000"                
 DEBUG_PORT="5678"
 
-ComposeDev="docker-compose.yml"
+ComposeDev="docker-compose-dev.yml"
 ComposeDebug="docker-compose.debug.yml"
 # =========================================================
 

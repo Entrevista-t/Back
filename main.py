@@ -3,6 +3,18 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from database import get_db, engine, Base
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import JSONResponse
+from interview_analyzer import analyze_interview
+import os
+import asyncio
+import tempfile
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 app = FastAPI(
     title="Entrevistat't API",
@@ -132,3 +144,49 @@ def test_db_connection(db: Session = Depends(get_db)):
             return {"status": "Connexió a PostgreSQL perfecta! 🎉"}
     except Exception as e:
         return {"status": "Error connectant a la BD", "detall": str(e)}
+    
+@app.post("/analyze")
+async def analyze(
+    video: UploadFile = File(..., description="Video file of the interview answer"),
+    question: str = Form(..., description="The interviewer's question text"),
+    language: str = Form("ca", description="Language hint for transcription"),
+):
+    """
+    Analyze a candidate's interview video.
+
+    Accepts a video file and the interviewer's question, then returns
+    audio, text, and video metrics evaluating the candidate's performance.
+    """
+    tmp_path = None
+    try:
+        # Save uploaded video to a temp file with size limit
+        suffix = os.path.splitext(video.filename or ".mp4")[1]
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+            total = 0
+            while chunk := await video.read(1024 * 1024):
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File too large")
+                tmp.write(chunk)
+
+        # Run the blocking analysis pipeline in a thread to avoid freezing the event loop
+        result = await asyncio.to_thread(analyze_interview, tmp_path, question, language)
+        return JSONResponse(content=result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Analysis endpoint error: %s", e)
+        raise HTTPException(status_code=500, detail="Analysis failed")
+
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+@app.get("/health", tags=["health"])
+def health() -> dict[str, str]:
+    return {"status": "ok"}
