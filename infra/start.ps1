@@ -1,6 +1,10 @@
 # start.ps1
 Clear-Host
 
+# Ensure we run from the repo root (parent of infra/)
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location (Split-Path -Parent $ScriptDir)
+
 # =========================================================
 # 🛠️ CONFIGURACIÓN DEL PROYECTO (FastAPI)
 # =========================================================
@@ -10,10 +14,10 @@ $CONTAINER_DEBUG = "entrevistatt_api_debug"
 $API_PORT        = "8000"                
 $DEBUG_PORT      = "5678"
 
-$ComposeDev      = "docker-compose-dev.yml"
-$ComposeDebug    = "docker-compose.debug.yml"
+$ComposeDev      = "infra/docker-compose-dev.yml"
+$ComposeDebug    = "infra/docker-compose.debug.yml"
 $MLBaseImage     = "ghcr.io/entrevista-t/back:ml-base"
-$MLBaseDockerfile = "Dockerfile.ml-base"
+$MLBaseDockerfile = "infra/Dockerfile.ml-base"
 # =========================================================
 
 Write-Host "$APP_NAME - Docker Manager" -ForegroundColor Cyan

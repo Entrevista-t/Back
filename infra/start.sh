@@ -2,6 +2,10 @@
 
 clear
 
+# Ensure we run from the repo root (parent of infra/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(dirname "$SCRIPT_DIR")"
+
 # =========================================================
 # 🛠️ CONFIGURACIÓ DEL PROJECTE (FastAPI)
 # =========================================================
@@ -11,8 +15,8 @@ CONTAINER_DEBUG="entrevistatt_api_debug"
 API_PORT="8000"                
 DEBUG_PORT="5678"
 
-ComposeDev="docker-compose-dev.yml"
-ComposeDebug="docker-compose.debug.yml"
+ComposeDev="infra/docker-compose-dev.yml"
+ComposeDebug="infra/docker-compose.debug.yml"
 # =========================================================
 
 # Definicions de colors

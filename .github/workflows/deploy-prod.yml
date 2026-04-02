@@ -33,7 +33,7 @@ jobs:
         with:
           filters: |
             ml_base:
-              - 'Dockerfile.ml-base'
+              - 'infra/Dockerfile.ml-base'
               - 'requirements.txt'
               - 'requirements-base.txt'
               - 'requirements-audio-nlp.txt'
@@ -63,7 +63,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.ml-base
+          file: ./infra/Dockerfile.ml-base
           pull: true
           push: true
           tags: ${{ env.BASE_IMAGE }}
@@ -103,7 +103,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          file: ./infra/Dockerfile
           pull: true
           push: true
           tags: |

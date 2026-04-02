@@ -1,26 +1,27 @@
 services:
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: infra/Dockerfile
       target: dev
       args:
         BASE_IMAGE: ghcr.io/entrevista-t/back:ml-base
-    container_name: entrevistatt_api_dev
+    container_name: entrevistatt_api_debug
     ports:
       - "8000:8000"
+      - "5678:5678"
     dns:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
-      - .:/app
+      - ..:/app
       - pip-cache:/root/.cache/pip
       - hf-cache:/root/.cache/huggingface
     env_file:
-      - .env
+      - ../.env
     environment:
       PYTHONUNBUFFERED: "1"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 volumes:
   pip-cache:
