@@ -1,18 +1,3 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-debugpy==1.8.11
-pytest==8.3.4
-sqlalchemy
-psycopg2-binary
-python-dotenv
-requests
-librosa
-numpy
-openai-whisper
-spacy
-sentence-transformers
-scikit-learn
-opencv-python-headless
-mediapipe
-deepface
+-r requirements-base.txt
+-r requirements-audio-nlp.txt
+-r requirements-vision.txt

@@ -1,6 +1,11 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        BASE_IMAGE: ghcr.io/entrevista-t/back:ml-base
     container_name: entrevistatt_api_dev
     ports:
       - "8000:8000"
@@ -9,12 +14,14 @@ services:
       - 1.1.1.1
     volumes:
       - .:/app
-    
+      - pip-cache:/root/.cache/pip
+      - hf-cache:/root/.cache/huggingface
     env_file:
       - .env
-    
     environment:
-      - PYTHONUNBUFFERED=1
-    
-    # Servidor Uvicorn con recarga automática (hot reload)
+      PYTHONUNBUFFERED: "1"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  pip-cache:
+  hf-cache:

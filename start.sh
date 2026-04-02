@@ -45,7 +45,7 @@ while true; do
             echo -e "${YELLOW}Starting containers in NORMAL MODE...${NC}"
             echo -e "${CYAN}Container name: $CONTAINER_DEV${NC}"
             echo -e "${CYAN}Port: $API_PORT${NC}"
-            docker-compose -f $ComposeDev up -d --build
+            docker compose -f $ComposeDev up -d --build
             echo -e "${GREEN}Done! Containers running in normal mode.${NC}"
             ;;
         2)
@@ -53,11 +53,11 @@ while true; do
             echo -e "${CYAN}Container name: $CONTAINER_DEBUG${NC}"
             echo -e "${CYAN}API Port: $API_PORT | Debug Port: $DEBUG_PORT${NC}"
             echo -e "${MAGENTA}Use: Run & Debug (Ctrl+Shift+D) -> 'Python Debugger: FastAPI (Docker Remote)' -> F5${NC}"
-            docker-compose -f $ComposeDebug up -d --build
+            docker compose -f $ComposeDebug up -d --build
             echo -e "${GREEN}Done! Containers running in debug mode. Waiting for debugger connection...${NC}"
             sleep 2
             echo -e "${YELLOW}Opening logs to show debugger status...${NC}"
-            docker-compose -f $ComposeDebug logs -f api
+            docker compose -f $ComposeDebug logs -f api
             ;;
         3)
             echo -e "${YELLOW}Showing logs... (Press Ctrl+C to return to menu)${NC}"
@@ -67,10 +67,10 @@ while true; do
             
             if [ -n "$debugRunning" ]; then
                 echo -e "${MAGENTA}Debug mode container detected${NC}"
-                docker-compose -f $ComposeDebug logs -f api
+                docker compose -f $ComposeDebug logs -f api
             elif [ -n "$normalRunning" ]; then
                 echo -e "${GREEN}Normal mode container detected${NC}"
-                docker-compose -f $ComposeDev logs -f api
+                docker compose -f $ComposeDev logs -f api
             else
                 echo -e "${RED}No containers running.${NC}"
             fi
@@ -83,17 +83,17 @@ while true; do
             
             if [ -n "$debugRunning" ]; then
                 echo -e "${MAGENTA}Connecting to debug mode container...${NC}"
-                docker-compose -f $ComposeDebug exec api /bin/bash
+                docker compose -f $ComposeDebug exec api /bin/bash
             elif [ -n "$normalRunning" ]; then
                 echo -e "${GREEN}Connecting to normal mode container...${NC}"
-                docker-compose -f $ComposeDev exec api /bin/bash
+                docker compose -f $ComposeDev exec api /bin/bash
             else
                 echo -e "${RED}Error: No containers running. Start with option 1 or 2 first.${NC}"
             fi
             ;;
         5)
             echo -e "${CYAN}Running Tests...${NC}"
-            docker-compose -f $ComposeDev run --rm api pytest tests/ || echo -e "${RED}Error running tests.${NC}"
+            docker compose -f $ComposeDev run --rm api pytest || echo -e "${RED}Error running tests.${NC}"
             ;;
         6)
             echo -e "${MAGENTA}Stopping containers...${NC}"
@@ -103,11 +103,11 @@ while true; do
             
             if [ -n "$debugRunning" ]; then
                 echo -e "${MAGENTA}Stopping debug mode container...${NC}"
-                docker-compose -f $ComposeDebug stop
+                docker compose -f $ComposeDebug stop
             fi
             if [ -n "$normalRunning" ]; then
                 echo -e "${GREEN}Stopping normal mode container...${NC}"
-                docker-compose -f $ComposeDev stop
+                docker compose -f $ComposeDev stop
             fi
             if [ -z "$normalRunning" ] && [ -z "$debugRunning" ]; then
                 echo -e "${YELLOW}No containers running.${NC}"
@@ -123,11 +123,11 @@ while true; do
             
             if [ -n "$debugRunning" ]; then
                 echo -e "${MAGENTA}Removing debug mode container...${NC}"
-                docker-compose -f $ComposeDebug down
+                docker compose -f $ComposeDebug down
             fi
             if [ -n "$normalRunning" ]; then
                 echo -e "${GREEN}Removing normal mode container...${NC}"
-                docker-compose -f $ComposeDev down
+                docker compose -f $ComposeDev down
             fi
             echo -e "${RED}All containers removed. Exiting...${NC}"
             exit 0
