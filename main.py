@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from database import get_db, engine, Base
+from db.database import get_db, engine, Base
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from interview_analyzer import analyze_interview
