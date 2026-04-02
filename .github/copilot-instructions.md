@@ -11,7 +11,7 @@ FastAPI backend for the Entrevista't interview practice platform. Receives video
 ### Development (Docker)
 ```powershell
 # Interactive launcher — covers all common tasks
-./infra/start.ps1
+./start.ps1
 
 # Start dev server with hot reload
 docker-compose -f infra/docker-compose-dev.yml up -d --build
@@ -45,15 +45,15 @@ DATABASE_URL=postgresql://<user>:<password>@<host>/<db>
 .
 ├── main.py                  # FastAPI app, all route definitions
 ├── database.py              # SQLAlchemy engine, Base, get_db() dependency
+├── start.ps1                # Docker manager script (Windows)
+├── start.sh                 # Docker manager script (Linux/Mac)
 ├── requirements.txt
 ├── infra/                   # Docker & orchestration files
 │   ├── Dockerfile
 │   ├── Dockerfile.ml-base
 │   ├── docker-compose.yml
 │   ├── docker-compose-dev.yml
-│   ├── docker-compose.debug.yml
-│   ├── start.ps1
-│   └── start.sh
+│   └── docker-compose.debug.yml
 └── interview_analyzer/      # AI analysis package
     ├── __init__.py          # Exports analyze_interview()
     ├── pipeline.py          # Orchestrator — wires all modules together

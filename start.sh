@@ -2,10 +2,6 @@
 
 clear
 
-# Ensure we run from the repo root (parent of infra/)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$(dirname "$SCRIPT_DIR")"
-
 # =========================================================
 # 🛠️ CONFIGURACIÓ DEL PROJECTE (FastAPI)
 # =========================================================

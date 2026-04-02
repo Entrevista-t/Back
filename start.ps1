@@ -1,10 +1,6 @@
 # start.ps1
 Clear-Host
 
-# Ensure we run from the repo root (parent of infra/)
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location (Split-Path -Parent $ScriptDir)
-
 # =========================================================
 # 🛠️ CONFIGURACIÓN DEL PROYECTO (FastAPI)
 # =========================================================
