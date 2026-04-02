@@ -1,0 +1,15 @@
+services:
+  api:
+    image: ghcr.io/entrevista-t/back:latest
+    container_name: entrevistatt_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    env_file:
+      - ../.env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000

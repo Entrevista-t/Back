@@ -14,7 +14,7 @@ FastAPI backend for the Entrevista't interview practice platform. Receives video
 ./start.ps1
 
 # Start dev server with hot reload
-docker-compose up -d --build
+docker-compose -f infra/docker-compose-dev.yml up -d --build
 # API runs at http://localhost:8000
 # Swagger UI at http://localhost:8000/docs
 ```
@@ -45,9 +45,15 @@ DATABASE_URL=postgresql://<user>:<password>@<host>/<db>
 .
 ├── main.py                  # FastAPI app, all route definitions
 ├── database.py              # SQLAlchemy engine, Base, get_db() dependency
+├── start.ps1                # Docker manager script (Windows)
+├── start.sh                 # Docker manager script (Linux/Mac)
 ├── requirements.txt
-├── Dockerfile
-├── docker-compose.yml
+├── infra/                   # Docker & orchestration files
+│   ├── Dockerfile
+│   ├── Dockerfile.ml-base
+│   ├── docker-compose.yml
+│   ├── docker-compose-dev.yml
+│   └── docker-compose.debug.yml
 └── interview_analyzer/      # AI analysis package
     ├── __init__.py          # Exports analyze_interview()
     ├── pipeline.py          # Orchestrator — wires all modules together
