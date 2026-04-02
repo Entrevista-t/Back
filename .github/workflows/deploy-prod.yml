@@ -144,6 +144,7 @@ jobs:
         with:
           context: .
           file: ./infra/Dockerfile
+          target: runtime
           pull: true
           push: true
           no-cache: true
