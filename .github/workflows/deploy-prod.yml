@@ -167,6 +167,7 @@ jobs:
           port: ${{ secrets.PROD_PORT }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
+          command_timeout: 30m
           script: |
             set -e
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
