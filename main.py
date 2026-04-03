@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from db.database import get_db, engine, Base
@@ -48,6 +49,15 @@ app = FastAPI(
     title="Entrevistat't API",
     description="Backend para el proyecto universitario",
     version="1.0.0"
+)
+
+# Configure CORS to allow requests from frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://entrevistat.kire.ovh", "http://localhost:3000", "http://localhost:5173"],  # Allow frontend origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
 # --- CONFIGURACIÓ JWT ---
