@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="assets/images/logo_entrevistat.png" alt="Entrevista't logo" width="200" height="auto" />
   <h1>Entrevista't — Backend</h1>
 
   <p>
