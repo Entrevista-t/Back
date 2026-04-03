@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
-from sqlalchemy import text
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from db.database import get_db, engine, Base
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -11,8 +12,36 @@ import asyncio
 import tempfile
 import logging
 
+#--------------------------------NEW IMPORTS--------------------------------
+from fastapi import status
+from passlib.context import CryptContext
+from db.models import Usuari, Categoria, Pregunta
+from db.schemas import (
+    UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate, 
+    CategoriaCreate, CategoriaResponse, 
+    PreguntaCreate, PreguntaResponse
+)
+
+import jwt
+from datetime import datetime, timedelta, timezone
+
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import jwt
+from jwt.exceptions import InvalidTokenError
+from datetime import datetime, timedelta, timezone
+
+from typing import List, Optional
+
+#--------------------------------PASSWD HASHING CONTEXT--------------------------------
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str):
+    return pwd_context.hash(password)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+#--------------------------------FASTAPI APP & CONFIG--------------------------------
 
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
@@ -22,23 +51,151 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Configure CORS to allow requests from frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://entrevistat.kire.ovh", "http://localhost:3000", "http://localhost:5173"],  # Allow frontend origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
+
+# --- CONFIGURACIÓ JWT ---
+# IMPORTANT: Més endavant, posa aquest SECRET_KEY al teu fitxer .env!
+SECRET_KEY = "la-teva-clau-secreta-molt-llarga-i-segura" 
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # El token durarà 24 hores
+
+def verify_password(plain_password, hashed_password):
+    """Comprova si la contrasenya en text pla coincideix amb el hash de la BD."""
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    """Genera un token JWT amb una data de caducitat."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
 @app.get("/", include_in_schema=False)
 def read_root():
     return RedirectResponse(url="/docs")
 
 # ==========================================
+# ⚙️ CONFIGURACIÓ OAUTH2 I JWT
+# ==========================================
+
+SECRET_KEY = "la-teva-clau-secreta-molt-llarga-i-segura" # Posada al .env
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # Token lasts 24 hours
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    """Generates the actual JWT token string."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """The Security Guard: Reads the token, validates it, and fetches the user from your DB."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except InvalidTokenError:
+        raise credentials_exception
+        
+    user = db.query(Usuari).filter(Usuari.id == int(user_id)).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+# ==========================================
 # 🔐 AUTENTICACIÓ
 # ==========================================
 
-@app.post("/auth/register", tags=["Autenticació"])
-def register():
+#Things to add to docker container:
+# pip install email-validator --> for validating email formats in Pydantic models
+# pip install "passlib[bcrypt]" --> lbrary for hashing passwords securely (bcrypt algorithm)
+
+@app.post("/auth/register", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Autenticació"])
+def register(user: UsuariCreate, db: Session = Depends(get_db)):
     """Crea un compte nou (Registre)."""
-    return {"message": "Usuari registrat correctament"}
+    
+    existing_user = db.query(Usuari).filter(Usuari.email == user.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Aquest email ja està registrat."
+        )
+
+    hashed_password = get_password_hash(user.password)
+
+    nou_usuari = Usuari(
+        nom=user.nom,
+        email=user.email,
+        password=hashed_password
+    )
+
+    db.add(nou_usuari)
+    db.commit()
+    
+    db.refresh(nou_usuari)
+
+    return nou_usuari
+
+#Things we should take into account regarding security (rn it can happen):
+    # Bot protection and rate limiting (DOS attacks)
+    # 2. Email ownership verification --> adding if_active = false to DB (confirmation link with token sent to email)
+    # 3. User enumeration prevention (same error message for existing and non-existing emails during registration and login)
+    # 4. CORS
+    # 5. Password reset functionality (not implemented yet, but should be considered for future development)
+
+# pip install PyJWT --> in requirements.txt
+
 
 @app.post("/auth/login", tags=["Autenticació"])
-def login():
-    """Autentica l'usuari i retorna un token (Login)."""
-    return {"access_token": "fake-jwt-token", "token_type": "bearer"}
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Autentica l'usuari i retorna un token JWT (Login compatible amb Swagger)."""
+    
+    # IMPORTANT: El Swagger posa el nostre email dins del camp 'username' per defecte.
+    # Per tant, busquem a la BD fent servir form_data.username
+    user = db.query(Usuari).filter(Usuari.email == form_data.username).first()
+    
+    # Comprovem contrasenya
+    if not user or not verify_password(form_data.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email o contrasenya incorrectes",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    # Creem i retornem el token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, 
+        expires_delta=access_token_expires
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 # ==========================================
@@ -48,40 +205,199 @@ def login():
 # NOTA IMPORTANT: '/usuarios/me' ha d'anar SEMPRE abans que '/usuarios/{id}' 
 # perquè FastAPI llegeix de dalt a baix i podria confondre 'me' amb un ID.
 
-@app.get("/usuarios/me", tags=["Usuaris"])
-def get_current_user_profile():
+@app.get("/usuarios/me", response_model=UsuariResponse, tags=["Usuaris"])
+def get_current_user_profile(usuari_actual: Usuari = Depends(get_current_user)):
     """Retorna les dades del perfil de l'usuari autenticat actualment."""
-    return {"id": 1, "nom": "Usuari Actual", "email": "admin@entrevistatt.com"}
+    
+    return usuari_actual
 
-@app.post("/usuarios", tags=["Usuaris"])
-def create_user():
-    """Crea un nou usuari (normalment d'ús intern/admin)."""
-    return {"message": "Usuari creat", "id": 2}
 
-@app.get("/usuarios", tags=["Usuaris"])
-def list_users():
-    """Llista tots els usuaris."""
-    return [{"id": 1, "nom": "Usuari 1"}, {"id": 2, "nom": "Usuari 2"}]
+# Per crear usuaris internament
+@app.post("/usuarios", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Usuaris"])
+def create_user(
+    user: UsuariCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 El Guàrdia de Seguretat!
+):
+    """
+    Crea un nou usuari (ús intern). 
+    A diferència del registre, necessites estar loguejat per fer servir això.
+    """
+    
+    existing_user = db.query(Usuari).filter(Usuari.email == user.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Aquest email ja està registrat."
+        )
 
-@app.get("/usuarios/{id}", tags=["Usuaris"])
-def get_user(id: int):
-    """Retorna els detalls d'un usuari específic."""
-    return {"id": id, "nom": f"Detalls de l'usuari {id}"}
+    hashed_password = get_password_hash(user.password)
 
-@app.put("/usuarios/{id}", tags=["Usuaris"])
-def update_user_full(id: int):
-    """Reemplaça totes les dades d'un usuari."""
-    return {"message": f"Usuari {id} actualitzat completament"}
+    nou_usuari = Usuari(
+        nom=user.nom,
+        email=user.email,
+        password=hashed_password
+    )
 
-@app.patch("/usuarios/{id}", tags=["Usuaris"])
-def update_user_partial(id: int):
-    """Modifica camps específics d'un usuari."""
-    return {"message": f"Usuari {id} modificat parcialment"}
+    db.add(nou_usuari)
+    db.commit()
+    db.refresh(nou_usuari)
+
+    return nou_usuari
+
+@app.get("/usuarios", response_model=List[UsuariResponse], tags=["Usuaris"])
+def list_users(
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Llista tots els usuaris de la base de dades."""
+    usuaris = db.query(Usuari).all()
+    return usuaris
+
+@app.get("/usuarios/{id}", response_model=UsuariResponse, tags=["Usuaris"])
+def get_user(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Retorna els detalls d'un usuari específic buscant pel seu ID."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuari no trobat"
+        )
+    return user
+
+@app.put("/usuarios/{id}", response_model=UsuariResponse, tags=["Usuaris"])
+def update_user_full(
+    id: int, 
+    user_in: UsuariCreate, # El PUT demana l'esquema de creació (tot obligatori)
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Reemplaça totes les dades d'un usuari. (Requereix enviar nom, email i password)."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuari no trobat")
+        
+    user.nom = user_in.nom
+    user.email = user_in.email
+    user.password = get_password_hash(user_in.password)
+    
+    db.commit()
+    db.refresh(user)
+    return user
+
+@app.patch("/usuarios/{id}", response_model=UsuariResponse, tags=["Usuaris"])
+def update_user_partial(
+    id: int, 
+    user_in: UsuariUpdate, # El PATCH utilitza l'esquema on tot és opcional
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Modifica camps específics d'un usuari (pots enviar només el nom, per exemple)."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuari no trobat")
+        
+    # Modifiquem NOMÉS els camps que ens han enviat al JSON
+    if user_in.nom is not None:
+        user.nom = user_in.nom
+    if user_in.email is not None:
+        user.email = user_in.email
+    if user_in.password is not None:
+        user.password = get_password_hash(user_in.password)
+        
+    db.commit()
+    db.refresh(user)
+    return user
 
 @app.delete("/usuarios/{id}", tags=["Usuaris"])
-def delete_user(id: int):
-    """Elimina un usuari."""
-    return {"message": f"Usuari {id} eliminat"}
+def delete_user(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Elimina un usuari de la base de dades."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuari no trobat"
+        )
+        
+    # Eliminem l'usuari i guardem els canvis
+    db.delete(user)
+    db.commit()
+    
+    return {"message": f"Usuari amb ID {id} eliminat correctament"}
+
+# ==========================================
+# 🏷️ CATEGORIES
+# ==========================================
+
+@app.get("/categorias", response_model=List[CategoriaResponse], tags=["Categories"])
+def get_categories(db: Session = Depends(get_db)):
+    """Retorna totes les categories disponibles a la base de dades."""
+    
+    # Busquem totes les categories a la taula
+    categories = db.query(Categoria).all()
+    return categories
+
+# ==========================================
+# ❓ PREGUNTES
+# ==========================================
+
+@app.post("/preguntas", response_model=PreguntaResponse, status_code=status.HTTP_201_CREATED, tags=["Preguntes"])
+def create_question(
+    pregunta: PreguntaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Afegeix una nova pregunta associada a una categoria."""
+    
+    # 1. Verifiquem que la categoria existeixi
+    cat = db.query(Categoria).filter(Categoria.id == pregunta.id_categoria).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="La categoria especificada no existeix.")
+
+    # 2. Creem la pregunta (COMPTE AQUÍ: fem servir text_pregunta)
+    nova_pregunta = Pregunta(
+        text_pregunta=pregunta.text_pregunta, 
+        id_categoria=pregunta.id_categoria
+    )
+    
+    # 3. Guardem a la base de dades
+    db.add(nova_pregunta)
+    db.commit()
+    db.refresh(nova_pregunta)
+    
+    return nova_pregunta
+
+@app.get("/preguntas", response_model=List[PreguntaResponse], tags=["Preguntes"])
+def list_questions(
+    categoria_id: Optional[int] = None, # 🔎 Això és un Query Parameter opcional
+    db: Session = Depends(get_db)
+):
+    """
+    Llista totes les preguntes. 
+    Si li passes un categoria_id, només et retornarà les d'aquella categoria.
+    """
+    
+    # Si ens han passat una categoria, filtrem
+    if categoria_id:
+        preguntes = db.query(Pregunta).filter(Pregunta.id_categoria == categoria_id).all()
+    # Si no ens han passat res, les retornem totes
+    else:
+        preguntes = db.query(Pregunta).all()
+        
+    return preguntes
+
 
 
 # ==========================================
@@ -115,25 +431,6 @@ def list_user_interviews(id: int):
         {"id_entrevista": 102, "usuari_id": id, "data": "2024-03-21"}
     ]
 
-
-# ==========================================
-# ❓ PREGUNTES
-# ==========================================
-
-@app.get("/preguntas", tags=["Preguntes"])
-def get_questions(
-    # categoria: Optional[str] = Query(None, description="Filtra per categoria (ex: tecnica, personal)"), 
-    # random: bool = Query(False, description="Retorna les preguntes en ordre aleatori")
-):
-    """Retorna una llista de preguntes amb opcions de filtratge via query params."""
-    return {
-        # "categoria_filtrada": categoria,
-        # "aleatori": random,
-        "preguntes": [
-            "Quines són les teves fortaleses?",
-            "Explica'm un repte tècnic que hagis superat."
-        ]
-    }
 
 @app.get("/test-db")
 def test_db_connection(db: Session = Depends(get_db)):

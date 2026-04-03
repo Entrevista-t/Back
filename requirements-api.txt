@@ -6,4 +6,7 @@ psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 python-multipart==0.0.20
 requests==2.32.3
-numpy==1.26.4
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+PyJWT==2.10.1
+email-validator==2.2.0

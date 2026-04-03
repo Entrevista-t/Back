@@ -1,4 +1,3 @@
--r requirements-base.txt
+-r requirements-api.txt
 -r requirements-audio-nlp.txt
 -r requirements-vision.txt
-# Trigger the installation of the latest version of the package from PyPI

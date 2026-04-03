@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+load_dotenv()
+
 # Leemos la URL. Si por algún motivo no encuentra el .env, lanzará un error para avisarte.
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 

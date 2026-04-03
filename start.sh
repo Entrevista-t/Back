@@ -13,6 +13,8 @@ DEBUG_PORT="5678"
 
 ComposeDev="infra/docker-compose-dev.yml"
 ComposeDebug="infra/docker-compose.debug.yml"
+MLBaseImage="ghcr.io/entrevista-t/back:ml-base"
+MLBaseDockerfile="infra/Dockerfile.ml-base"
 # =========================================================
 
 # Definicions de colors
@@ -35,10 +37,11 @@ while true; do
     echo "4. Enter container terminal (Bash)"
     echo "5. Run Unit Tests (pytest)"
     echo "6. Stop containers (Stop)"
-    echo "7. Stop everything and Exit script"
+    echo "7. Build & Push ML base image (GHCR)"
+    echo "8. Stop everything and Exit script"
     echo -e "${GREEN}----------------------------------------${NC}"
     
-    read -p "Select an option (1-7): " selection
+    read -p "Select an option (1-8): " selection
 
     case $selection in
         1)
@@ -116,6 +119,39 @@ while true; do
             fi
             ;;
         7)
+            echo -e "${YELLOW}Build & Push ML base image to GHCR${NC}"
+            echo -e "${CYAN}Image: $MLBaseImage${NC}"
+            echo -e "${CYAN}Dockerfile: $MLBaseDockerfile${NC}"
+
+            # Check GHCR login
+            loginCheck=$(docker pull ghcr.io/entrevista-t/back:login-test 2>&1)
+            if echo "$loginCheck" | grep -qiE "denied|unauthorized"; then
+                echo -e "\n${YELLOW}Not logged in to GHCR. Logging in...${NC}"
+                echo -e "${MAGENTA}You need a GitHub PAT with 'write:packages' scope.${NC}"
+                docker login ghcr.io
+                if [ $? -ne 0 ]; then
+                    echo -e "${RED}Login failed. Aborting.${NC}"
+                    continue
+                fi
+            fi
+
+            echo -e "\n${YELLOW}Building image...${NC}"
+            docker build -t "$MLBaseImage" -f "$MLBaseDockerfile" .
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}Build failed.${NC}"
+                continue
+            fi
+            echo -e "${GREEN}Build succeeded!${NC}"
+
+            echo -e "${YELLOW}Pushing image to GHCR...${NC}"
+            docker push "$MLBaseImage"
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}Push failed. Make sure you are logged in to GHCR (docker login ghcr.io).${NC}"
+                continue
+            fi
+            echo -e "${GREEN}ML base image pushed successfully!${NC}"
+            ;;
+        8)
             echo -e "${RED}Shutting down and removing containers...${NC}"
             echo -e "${CYAN}Detecting running containers...${NC}"
             normalRunning=$(docker ps -q -f "name=$CONTAINER_DEV" 2>/dev/null)
