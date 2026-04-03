@@ -14,8 +14,8 @@ import logging
 #--------------------------------NEW IMPORTS--------------------------------
 from fastapi import status
 from passlib.context import CryptContext
-from db.models import Usuari
-from db.schemas import UsuariCreate, UsuariResponse, UsuariUpdate
+from db.models import Usuari, Categoria
+from db.schemas import UsuariCreate, UsuariResponse, UsuariUpdate, CategoriaResponse
 
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -324,6 +324,17 @@ def delete_user(
     
     return {"message": f"Usuari amb ID {id} eliminat correctament"}
 
+# ==========================================
+# 🏷️ CATEGORIES
+# ==========================================
+
+@app.get("/categorias", response_model=List[CategoriaResponse], tags=["Categories"])
+def get_categories(db: Session = Depends(get_db)):
+    """Retorna totes les categories disponibles a la base de dades."""
+    
+    # Busquem totes les categories a la taula
+    categories = db.query(Categoria).all()
+    return categories
 
 # ==========================================
 # 🎥 ENTREVISTES / ANÀLISI

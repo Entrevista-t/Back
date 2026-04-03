@@ -46,3 +46,13 @@ class UsuariUpdate(BaseModel):
     nom: Optional[str] = None
     email: Optional[str] = None
     password: Optional[str] = None
+
+class CategoriaBase(BaseModel):
+    nom: str
+    descripcio: Optional[str] = None
+
+class CategoriaResponse(CategoriaBase):
+    id: int
+
+class Config:
+        from_attributes = True
