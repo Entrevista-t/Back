@@ -17,7 +17,12 @@ class UsuariCreate(UsuariBase):
     @field_validator('password')
     @classmethod
     def validate_password_strength(cls, v: str):
-        # Comentat per proves
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('Password must contain at least one digit')
         return v
 
 class UsuariResponse(UsuariBase):
@@ -31,9 +36,22 @@ class UsuariLogin(BaseModel):
     password: str
 
 class UsuariUpdate(BaseModel):
-    nom: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+    nom: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8, max_length=50)
+
+    @field_validator('password')
+    @classmethod
+    def validate_password_strength(cls, v):
+        if v is None:
+            return v
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('Password must contain at least one digit')
+        return v
 
 
 # ==========================================
