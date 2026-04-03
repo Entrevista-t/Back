@@ -1,6 +1,6 @@
 from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from db.database import get_db, engine, Base
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -14,19 +14,22 @@ import logging
 #--------------------------------NEW IMPORTS--------------------------------
 from fastapi import status
 from passlib.context import CryptContext
-from db.models import Usuari, Categoria
-from db.schemas import CategoriaCreate, UsuariCreate, UsuariResponse, UsuariUpdate, CategoriaResponse
+from db.models import Usuari, Categoria, Pregunta
+from db.schemas import (
+    UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate, 
+    CategoriaCreate, CategoriaResponse, 
+    PreguntaCreate, PreguntaResponse
+)
 
 import jwt
 from datetime import datetime, timedelta, timezone
-from db.schemas import UsuariLogin
 
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import jwt
 from jwt.exceptions import InvalidTokenError
 from datetime import datetime, timedelta, timezone
 
-from typing import List
+from typing import List, Optional
 
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -336,32 +339,56 @@ def get_categories(db: Session = Depends(get_db)):
     categories = db.query(Categoria).all()
     return categories
 
-# Afegeix CategoriaCreate a l'import de dalt:
-# from db.schemas import ..., CategoriaCreate
+# ==========================================
+# ❓ PREGUNTES
+# ==========================================
 
-@app.post("/categorias", response_model=CategoriaResponse, status_code=status.HTTP_201_CREATED, tags=["Categories"])
-def create_category(
-    categoria: CategoriaCreate, 
+@app.post("/preguntas", response_model=PreguntaResponse, status_code=status.HTTP_201_CREATED, tags=["Preguntes"])
+def create_question(
+    pregunta: PreguntaCreate, 
     db: Session = Depends(get_db),
-    usuari_actual: Usuari = Depends(get_current_user) # Opcional: només els loguejats poden crear categories
+    usuari_actual: Usuari = Depends(get_current_user)
 ):
-    """Crea una nova categoria a la base de dades."""
+    """Afegeix una nova pregunta associada a una categoria."""
     
-    db_categoria = db.query(Categoria).filter(Categoria.nom == categoria.nom).first()
-    if db_categoria:
-        raise HTTPException(status_code=400, detail="Aquesta categoria ja existeix.")
-    
-    # Creem l'objecte del model
-    nova_categoria = Categoria(
-        nom=categoria.nom,
-        descripcio=categoria.descripcio
+    # 1. Verifiquem que la categoria existeixi
+    cat = db.query(Categoria).filter(Categoria.id == pregunta.id_categoria).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="La categoria especificada no existeix.")
+
+    # 2. Creem la pregunta (COMPTE AQUÍ: fem servir text_pregunta)
+    nova_pregunta = Pregunta(
+        text_pregunta=pregunta.text_pregunta, 
+        id_categoria=pregunta.id_categoria
     )
     
-    db.add(nova_categoria)
+    # 3. Guardem a la base de dades
+    db.add(nova_pregunta)
     db.commit()
-    db.refresh(nova_categoria)
+    db.refresh(nova_pregunta)
     
-    return nova_categoria
+    return nova_pregunta
+
+@app.get("/preguntas", response_model=List[PreguntaResponse], tags=["Preguntes"])
+def list_questions(
+    categoria_id: Optional[int] = None, # 🔎 Això és un Query Parameter opcional
+    db: Session = Depends(get_db)
+):
+    """
+    Llista totes les preguntes. 
+    Si li passes un categoria_id, només et retornarà les d'aquella categoria.
+    """
+    
+    # Si ens han passat una categoria, filtrem
+    if categoria_id:
+        preguntes = db.query(Pregunta).filter(Pregunta.id_categoria == categoria_id).all()
+    # Si no ens han passat res, les retornem totes
+    else:
+        preguntes = db.query(Pregunta).all()
+        
+    return preguntes
+
+
 
 # ==========================================
 # 🎥 ENTREVISTES / ANÀLISI
@@ -394,25 +421,6 @@ def list_user_interviews(id: int):
         {"id_entrevista": 102, "usuari_id": id, "data": "2024-03-21"}
     ]
 
-
-# ==========================================
-# ❓ PREGUNTES
-# ==========================================
-
-@app.get("/preguntas", tags=["Preguntes"])
-def get_questions(
-    # categoria: Optional[str] = Query(None, description="Filtra per categoria (ex: tecnica, personal)"), 
-    # random: bool = Query(False, description="Retorna les preguntes en ordre aleatori")
-):
-    """Retorna una llista de preguntes amb opcions de filtratge via query params."""
-    return {
-        # "categoria_filtrada": categoria,
-        # "aleatori": random,
-        "preguntes": [
-            "Quines són les teves fortaleses?",
-            "Explica'm un repte tècnic que hagis superat."
-        ]
-    }
 
 @app.get("/test-db")
 def test_db_connection(db: Session = Depends(get_db)):

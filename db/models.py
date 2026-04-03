@@ -2,7 +2,9 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
-from .database import Base 
+from .database import Base
+
+
 
 class Usuari(Base):
     __tablename__ = "usuaris"

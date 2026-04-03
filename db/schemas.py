@@ -1,9 +1,11 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
-import re # for field_validator
-
 from typing import Optional
-from pydantic import BaseModel
+import re 
+
+# ==========================================
+# 👤 USUARIS
+# ==========================================
 
 class UsuariBase(BaseModel):
     nom: str = Field(..., min_length=2, max_length=100)
@@ -15,21 +17,7 @@ class UsuariCreate(UsuariBase):
     @field_validator('password')
     @classmethod
     def validate_password_strength(cls, v: str):
-        #comentem això de moment per poder-ho provar més fàcilment
-
-        #if not any(char.isdigit() for char in v):
-        #    raise ValueError('La contrasenya ha de contenir almenys un número.')
-        
-        #if not any(char.isupper() for char in v):
-        #    raise ValueError('La contrasenya ha de contenir almenys una lletra majúscula.')
-        
-        #if not any(char.islower() for char in v):
-        #    raise ValueError('La contrasenya ha de contenir almenys una lletra minúscula.')
-        
-        #if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
-        #    raise ValueError('La contrasenya ha de contenir almenys un caràcter especial.')
-        
-            
+        # Comentat per proves
         return v
 
 class UsuariResponse(UsuariBase):
@@ -47,16 +35,37 @@ class UsuariUpdate(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
 
+
+# ==========================================
+# 🏷️ CATEGORIES
+# ==========================================
+
 class CategoriaBase(BaseModel):
     nom: str
     descripcio: Optional[str] = None
 
+class CategoriaCreate(CategoriaBase):
+    pass
+
 class CategoriaResponse(CategoriaBase):
     id: int
+    
+    model_config = {"from_attributes": True}
 
-class CategoriaCreate(BaseModel):
-    nom: str
-    descripcio: Optional[str] = None
 
-class Config:
-        from_attributes = True
+# ==========================================
+# ❓ PREGUNTES
+# ==========================================
+
+class PreguntaBase(BaseModel):
+    # Important: s'ha de dir exactament igual que la columna de models.py
+    text_pregunta: str 
+    id_categoria: int
+
+class PreguntaCreate(PreguntaBase):
+    pass
+
+class PreguntaResponse(PreguntaBase):
+    id: int
+
+    model_config = {"from_attributes": True}
