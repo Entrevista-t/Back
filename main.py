@@ -1,36 +1,26 @@
-from fastapi import Depends, FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, UploadFile, File, Form, HTTPException, status
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from db.database import get_db, engine, Base
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse
+from db.models import Usuari, Categoria, Pregunta
+from db.schemas import (
+    UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
+    CategoriaCreate, CategoriaResponse,
+    PreguntaCreate, PreguntaResponse
+)
 from interview_analyzer import analyze_interview
+from passlib.context import CryptContext
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+import jwt
+from jwt.exceptions import InvalidTokenError
 import os
 import asyncio
 import tempfile
 import logging
-
-#--------------------------------NEW IMPORTS--------------------------------
-from fastapi import status
-from passlib.context import CryptContext
-from db.models import Usuari, Categoria, Pregunta
-from db.schemas import (
-    UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate, 
-    CategoriaCreate, CategoriaResponse, 
-    PreguntaCreate, PreguntaResponse
-)
-
-import jwt
-from datetime import datetime, timedelta, timezone
-
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-import jwt
-from jwt.exceptions import InvalidTokenError
-from datetime import datetime, timedelta, timezone
-
-from typing import List, Optional
 
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -44,6 +34,7 @@ logger = logging.getLogger(__name__)
 #--------------------------------FASTAPI APP & CONFIG--------------------------------
 
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".wmv"}
 
 app = FastAPI(
     title="Entrevistat't API",
@@ -60,27 +51,9 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-# --- CONFIGURACIÓ JWT ---
-# IMPORTANT: Més endavant, posa aquest SECRET_KEY al teu fitxer .env!
-SECRET_KEY = "la-teva-clau-secreta-molt-llarga-i-segura" 
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # El token durarà 24 hores
-
 def verify_password(plain_password, hashed_password):
     """Comprova si la contrasenya en text pla coincideix amb el hash de la BD."""
     return pwd_context.verify(plain_password, hashed_password)
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    """Genera un token JWT amb una data de caducitat."""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
 
 
 @app.get("/", include_in_schema=False)
@@ -91,7 +64,10 @@ def read_root():
 # ⚙️ CONFIGURACIÓ OAUTH2 I JWT
 # ==========================================
 
-SECRET_KEY = "la-teva-clau-secreta-molt-llarga-i-segura" # Posada al .env
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+if not SECRET_KEY:
+    logger.warning("JWT_SECRET_KEY not set — using insecure default for development only!")
+    SECRET_KEY = "dev-only-insecure-default-change-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # Token lasts 24 hours
 
@@ -144,7 +120,7 @@ def register(user: UsuariCreate, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Aquest email ja està registrat."
+            detail="No s'ha pogut completar el registre."
         )
 
     hashed_password = get_password_hash(user.password)
@@ -161,13 +137,6 @@ def register(user: UsuariCreate, db: Session = Depends(get_db)):
     db.refresh(nou_usuari)
 
     return nou_usuari
-
-#Things we should take into account regarding security (rn it can happen):
-    # Bot protection and rate limiting (DOS attacks)
-    # 2. Email ownership verification --> adding if_active = false to DB (confirmation link with token sent to email)
-    # 3. User enumeration prevention (same error message for existing and non-existing emails during registration and login)
-    # 4. CORS
-    # 5. Password reset functionality (not implemented yet, but should be considered for future development)
 
 # pip install PyJWT --> in requirements.txt
 
@@ -278,6 +247,9 @@ def update_user_full(
     usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
 ):
     """Reemplaça totes les dades d'un usuari. (Requereix enviar nom, email i password)."""
+    if usuari_actual.id != id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tens permís per modificar aquest usuari.")
+
     user = db.query(Usuari).filter(Usuari.id == id).first()
     
     if not user:
@@ -299,6 +271,9 @@ def update_user_partial(
     usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
 ):
     """Modifica camps específics d'un usuari (pots enviar només el nom, per exemple)."""
+    if usuari_actual.id != id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tens permís per modificar aquest usuari.")
+
     user = db.query(Usuari).filter(Usuari.id == id).first()
     
     if not user:
@@ -323,6 +298,9 @@ def delete_user(
     usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
 ):
     """Elimina un usuari de la base de dades."""
+    if usuari_actual.id != id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tens permís per eliminar aquest usuari.")
+
     user = db.query(Usuari).filter(Usuari.id == id).first()
     
     if not user:
@@ -405,7 +383,7 @@ def list_questions(
 # ==========================================
 
 @app.post("/entrevistas", tags=["Entrevistes"])
-def upload_interview():
+def upload_interview(usuari_actual: Usuari = Depends(get_current_user)):
     """Rep l'arxiu de vídeo/àudio. Retorna l'ID de l'entrevista i un estat inicial."""
     return {
         "id_entrevista": 101, 
@@ -414,17 +392,17 @@ def upload_interview():
     }
 
 @app.get("/entrevistas/{id}", tags=["Entrevistes"])
-def get_interview_status(id: int):
+def get_interview_status(id: int, usuari_actual: Usuari = Depends(get_current_user)):
     """Retorna els detalls d'una entrevista. Aquí el front comprovarà l'estat i rebrà mètriques crues."""
     return {"id": id, "status": "completat", "metriques": "..."}
 
 @app.get("/entrevistas/{id}/informe", tags=["Entrevistes"])
-def get_interview_report(id: int):
+def get_interview_report(id: int, usuari_actual: Usuari = Depends(get_current_user)):
     """Retorna les dades processades i estructurades per generar gràfiques al frontend."""
     return {"id": id, "informe": "Dades estructurades per a gràfiques"}
 
 @app.get("/usuarios/{id}/entrevistas", tags=["Entrevistes"])
-def list_user_interviews(id: int):
+def list_user_interviews(id: int, usuari_actual: Usuari = Depends(get_current_user)):
     """Llista l'historial de totes les entrevistes gravades per un usuari concret."""
     return [
         {"id_entrevista": 101, "usuari_id": id, "data": "2024-03-20"},
@@ -433,7 +411,7 @@ def list_user_interviews(id: int):
 
 
 @app.get("/test-db")
-def test_db_connection(db: Session = Depends(get_db)):
+def test_db_connection(db: Session = Depends(get_db), _user: Usuari = Depends(get_current_user)):
     try:
         # Fem una consulta SQL purament de prova
         result = db.execute(text("SELECT 1")).scalar()
@@ -447,6 +425,7 @@ async def analyze(
     video: UploadFile = File(..., description="Video file of the interview answer"),
     question: str = Form(..., description="The interviewer's question text"),
     language: str = Form("ca", description="Language hint for transcription"),
+    usuari_actual: Usuari = Depends(get_current_user),
 ):
     """
     Analyze a candidate's interview video.
@@ -457,7 +436,9 @@ async def analyze(
     tmp_path = None
     try:
         # Save uploaded video to a temp file with size limit
-        suffix = os.path.splitext(video.filename or ".mp4")[1]
+        suffix = os.path.splitext(video.filename or ".mp4")[1].lower()
+        if suffix not in ALLOWED_VIDEO_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp_path = tmp.name
             total = 0
