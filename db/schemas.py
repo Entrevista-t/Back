@@ -2,6 +2,9 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
 import re # for field_validator
 
+from typing import Optional
+from pydantic import BaseModel
+
 class UsuariBase(BaseModel):
     nom: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
@@ -38,4 +41,8 @@ class UsuariResponse(UsuariBase):
 class UsuariLogin(BaseModel):
     email: EmailStr
     password: str
-    
+
+class UsuariUpdate(BaseModel):
+    nom: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None

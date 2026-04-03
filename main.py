@@ -15,7 +15,7 @@ import logging
 from fastapi import status
 from passlib.context import CryptContext
 from db.models import Usuari
-from db.schemas import UsuariCreate, UsuariResponse
+from db.schemas import UsuariCreate, UsuariResponse, UsuariUpdate
 
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -25,6 +25,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import jwt
 from jwt.exceptions import InvalidTokenError
 from datetime import datetime, timedelta, timezone
+
+from typing import List
 
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -230,30 +232,97 @@ def create_user(
 
     return nou_usuari
 
-@app.get("/usuarios", tags=["Usuaris"])
-def list_users():
-    """Llista tots els usuaris."""
-    return [{"id": 1, "nom": "Usuari 1"}, {"id": 2, "nom": "Usuari 2"}]
+@app.get("/usuarios", response_model=List[UsuariResponse], tags=["Usuaris"])
+def list_users(
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Llista tots els usuaris de la base de dades."""
+    usuaris = db.query(Usuari).all()
+    return usuaris
 
-@app.get("/usuarios/{id}", tags=["Usuaris"])
-def get_user(id: int):
-    """Retorna els detalls d'un usuari específic."""
-    return {"id": id, "nom": f"Detalls de l'usuari {id}"}
+@app.get("/usuarios/{id}", response_model=UsuariResponse, tags=["Usuaris"])
+def get_user(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Retorna els detalls d'un usuari específic buscant pel seu ID."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuari no trobat"
+        )
+    return user
 
-@app.put("/usuarios/{id}", tags=["Usuaris"])
-def update_user_full(id: int):
-    """Reemplaça totes les dades d'un usuari."""
-    return {"message": f"Usuari {id} actualitzat completament"}
+@app.put("/usuarios/{id}", response_model=UsuariResponse, tags=["Usuaris"])
+def update_user_full(
+    id: int, 
+    user_in: UsuariCreate, # El PUT demana l'esquema de creació (tot obligatori)
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Reemplaça totes les dades d'un usuari. (Requereix enviar nom, email i password)."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuari no trobat")
+        
+    user.nom = user_in.nom
+    user.email = user_in.email
+    user.password = get_password_hash(user_in.password)
+    
+    db.commit()
+    db.refresh(user)
+    return user
 
-@app.patch("/usuarios/{id}", tags=["Usuaris"])
-def update_user_partial(id: int):
-    """Modifica camps específics d'un usuari."""
-    return {"message": f"Usuari {id} modificat parcialment"}
+@app.patch("/usuarios/{id}", response_model=UsuariResponse, tags=["Usuaris"])
+def update_user_partial(
+    id: int, 
+    user_in: UsuariUpdate, # El PATCH utilitza l'esquema on tot és opcional
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Modifica camps específics d'un usuari (pots enviar només el nom, per exemple)."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuari no trobat")
+        
+    # Modifiquem NOMÉS els camps que ens han enviat al JSON
+    if user_in.nom is not None:
+        user.nom = user_in.nom
+    if user_in.email is not None:
+        user.email = user_in.email
+    if user_in.password is not None:
+        user.password = get_password_hash(user_in.password)
+        
+    db.commit()
+    db.refresh(user)
+    return user
 
 @app.delete("/usuarios/{id}", tags=["Usuaris"])
-def delete_user(id: int):
-    """Elimina un usuari."""
-    return {"message": f"Usuari {id} eliminat"}
+def delete_user(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Elimina un usuari de la base de dades."""
+    user = db.query(Usuari).filter(Usuari.id == id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuari no trobat"
+        )
+        
+    # Eliminem l'usuari i guardem els canvis
+    db.delete(user)
+    db.commit()
+    
+    return {"message": f"Usuari amb ID {id} eliminat correctament"}
 
 
 # ==========================================
