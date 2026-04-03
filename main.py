@@ -158,18 +158,22 @@ def register(user: UsuariCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/login", tags=["Autenticació"])
-def login(credentials: UsuariLogin, db: Session = Depends(get_db)):
-    """Autentica l'usuari i retorna un token JWT (Login)."""
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Autentica l'usuari i retorna un token JWT (Login compatible amb Swagger)."""
     
-    user = db.query(Usuari).filter(Usuari.email == credentials.email).first()
+    # IMPORTANT: El Swagger posa el nostre email dins del camp 'username' per defecte.
+    # Per tant, busquem a la BD fent servir form_data.username
+    user = db.query(Usuari).filter(Usuari.email == form_data.username).first()
     
-    if not user or not verify_password(credentials.password, user.password):
+    # Comprovem contrasenya
+    if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contrasenya incorrectes",
             headers={"WWW-Authenticate": "Bearer"},
         )
         
+    # Creem i retornem el token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user.id)}, 
@@ -186,15 +190,45 @@ def login(credentials: UsuariLogin, db: Session = Depends(get_db)):
 # NOTA IMPORTANT: '/usuarios/me' ha d'anar SEMPRE abans que '/usuarios/{id}' 
 # perquè FastAPI llegeix de dalt a baix i podria confondre 'me' amb un ID.
 
-@app.get("/usuarios/me", tags=["Usuaris"])
-def get_current_user_profile():
+@app.get("/usuarios/me", response_model=UsuariResponse, tags=["Usuaris"])
+def get_current_user_profile(usuari_actual: Usuari = Depends(get_current_user)):
     """Retorna les dades del perfil de l'usuari autenticat actualment."""
-    return {"id": 1, "nom": "Usuari Actual", "email": "admin@entrevistatt.com"}
+    
+    return usuari_actual
 
-@app.post("/usuarios", tags=["Usuaris"])
-def create_user():
-    """Crea un nou usuari (normalment d'ús intern/admin)."""
-    return {"message": "Usuari creat", "id": 2}
+
+# Per crear usuaris internament
+@app.post("/usuarios", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Usuaris"])
+def create_user(
+    user: UsuariCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 El Guàrdia de Seguretat!
+):
+    """
+    Crea un nou usuari (ús intern). 
+    A diferència del registre, necessites estar loguejat per fer servir això.
+    """
+    
+    existing_user = db.query(Usuari).filter(Usuari.email == user.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Aquest email ja està registrat."
+        )
+
+    hashed_password = get_password_hash(user.password)
+
+    nou_usuari = Usuari(
+        nom=user.nom,
+        email=user.email,
+        password=hashed_password
+    )
+
+    db.add(nou_usuari)
+    db.commit()
+    db.refresh(nou_usuari)
+
+    return nou_usuari
 
 @app.get("/usuarios", tags=["Usuaris"])
 def list_users():
