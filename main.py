@@ -11,8 +11,31 @@ import asyncio
 import tempfile
 import logging
 
+#--------------------------------NEW IMPORTS--------------------------------
+from fastapi import status
+from passlib.context import CryptContext
+from db.models import Usuari
+from db.schemas import UsuariCreate, UsuariResponse
+
+import jwt
+from datetime import datetime, timedelta, timezone
+from db.schemas import UsuariLogin
+
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import jwt
+from jwt.exceptions import InvalidTokenError
+from datetime import datetime, timedelta, timezone
+
+#--------------------------------PASSWD HASHING CONTEXT--------------------------------
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str):
+    return pwd_context.hash(password)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+#--------------------------------FASTAPI APP & CONFIG--------------------------------
 
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
@@ -22,23 +45,138 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# --- CONFIGURACIÓ JWT ---
+# IMPORTANT: Més endavant, posa aquest SECRET_KEY al teu fitxer .env!
+SECRET_KEY = "la-teva-clau-secreta-molt-llarga-i-segura" 
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # El token durarà 24 hores
+
+def verify_password(plain_password, hashed_password):
+    """Comprova si la contrasenya en text pla coincideix amb el hash de la BD."""
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    """Genera un token JWT amb una data de caducitat."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
 @app.get("/", include_in_schema=False)
 def read_root():
     return RedirectResponse(url="/docs")
 
 # ==========================================
+# ⚙️ CONFIGURACIÓ OAUTH2 I JWT
+# ==========================================
+
+SECRET_KEY = "la-teva-clau-secreta-molt-llarga-i-segura" # Posada al .env
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # Token lasts 24 hours
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    """Generates the actual JWT token string."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """The Security Guard: Reads the token, validates it, and fetches the user from your DB."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except InvalidTokenError:
+        raise credentials_exception
+        
+    user = db.query(Usuari).filter(Usuari.id == int(user_id)).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+# ==========================================
 # 🔐 AUTENTICACIÓ
 # ==========================================
 
-@app.post("/auth/register", tags=["Autenticació"])
-def register():
+#Things to add to docker container:
+# pip install email-validator --> for validating email formats in Pydantic models
+# pip install "passlib[bcrypt]" --> lbrary for hashing passwords securely (bcrypt algorithm)
+
+@app.post("/auth/register", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Autenticació"])
+def register(user: UsuariCreate, db: Session = Depends(get_db)):
     """Crea un compte nou (Registre)."""
-    return {"message": "Usuari registrat correctament"}
+    
+    existing_user = db.query(Usuari).filter(Usuari.email == user.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Aquest email ja està registrat."
+        )
+
+    hashed_password = get_password_hash(user.password)
+
+    nou_usuari = Usuari(
+        nom=user.nom,
+        email=user.email,
+        password=hashed_password
+    )
+
+    db.add(nou_usuari)
+    db.commit()
+    
+    db.refresh(nou_usuari)
+
+    return nou_usuari
+
+#Things we should take into account regarding security (rn it can happen):
+    # Bot protection and rate limiting (DOS attacks)
+    # 2. Email ownership verification --> adding if_active = false to DB (confirmation link with token sent to email)
+    # 3. User enumeration prevention (same error message for existing and non-existing emails during registration and login)
+    # 4. CORS
+    # 5. Password reset functionality (not implemented yet, but should be considered for future development)
+
+# pip install PyJWT --> in requirements.txt
+
 
 @app.post("/auth/login", tags=["Autenticació"])
-def login():
-    """Autentica l'usuari i retorna un token (Login)."""
-    return {"access_token": "fake-jwt-token", "token_type": "bearer"}
+def login(credentials: UsuariLogin, db: Session = Depends(get_db)):
+    """Autentica l'usuari i retorna un token JWT (Login)."""
+    
+    user = db.query(Usuari).filter(Usuari.email == credentials.email).first()
+    
+    if not user or not verify_password(credentials.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email o contrasenya incorrectes",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, 
+        expires_delta=access_token_expires
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 # ==========================================

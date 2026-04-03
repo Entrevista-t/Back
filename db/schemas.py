@@ -34,3 +34,8 @@ class UsuariResponse(UsuariBase):
     data_creacio: datetime
 
     model_config = {"from_attributes": True}
+
+class UsuariLogin(BaseModel):
+    email: EmailStr
+    password: str
+    
