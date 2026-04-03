@@ -54,5 +54,9 @@ class CategoriaBase(BaseModel):
 class CategoriaResponse(CategoriaBase):
     id: int
 
+class CategoriaCreate(BaseModel):
+    nom: str
+    descripcio: Optional[str] = None
+
 class Config:
         from_attributes = True

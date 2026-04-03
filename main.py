@@ -15,7 +15,7 @@ import logging
 from fastapi import status
 from passlib.context import CryptContext
 from db.models import Usuari, Categoria
-from db.schemas import UsuariCreate, UsuariResponse, UsuariUpdate, CategoriaResponse
+from db.schemas import CategoriaCreate, UsuariCreate, UsuariResponse, UsuariUpdate, CategoriaResponse
 
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -335,6 +335,33 @@ def get_categories(db: Session = Depends(get_db)):
     # Busquem totes les categories a la taula
     categories = db.query(Categoria).all()
     return categories
+
+# Afegeix CategoriaCreate a l'import de dalt:
+# from db.schemas import ..., CategoriaCreate
+
+@app.post("/categorias", response_model=CategoriaResponse, status_code=status.HTTP_201_CREATED, tags=["Categories"])
+def create_category(
+    categoria: CategoriaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # Opcional: només els loguejats poden crear categories
+):
+    """Crea una nova categoria a la base de dades."""
+    
+    db_categoria = db.query(Categoria).filter(Categoria.nom == categoria.nom).first()
+    if db_categoria:
+        raise HTTPException(status_code=400, detail="Aquesta categoria ja existeix.")
+    
+    # Creem l'objecte del model
+    nova_categoria = Categoria(
+        nom=categoria.nom,
+        descripcio=categoria.descripcio
+    )
+    
+    db.add(nova_categoria)
+    db.commit()
+    db.refresh(nova_categoria)
+    
+    return nova_categoria
 
 # ==========================================
 # 🎥 ENTREVISTES / ANÀLISI
