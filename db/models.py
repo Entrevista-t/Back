@@ -2,7 +2,6 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
-# Has d'importar la classe Base des del fitxer on l'hagis definit (ex: database.py)
 from .database import Base 
 
 class Usuari(Base):
@@ -14,7 +13,6 @@ class Usuari(Base):
     password = Column(String(255), nullable=False)
     data_creacio = Column(DateTime, server_default=func.now())
 
-    # Relació bidireccional amb Entrevistes
     entrevistes = relationship("Entrevista", back_populates="usuari")
 
 
