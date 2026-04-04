@@ -91,3 +91,7 @@ class PreguntaResponse(PreguntaBase):
     id: int
 
     model_config = {"from_attributes": True}
+
+class PreguntaUpdate(BaseModel):
+    text_pregunta: Optional[str] = None
+    id_categoria: Optional[int] = None

@@ -9,7 +9,7 @@ from db.models import Usuari, Categoria, Pregunta
 from db.schemas import (
     UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
     CategoriaCreate, CategoriaResponse, CategoriaUpdate,
-    PreguntaCreate, PreguntaResponse
+    PreguntaCreate, PreguntaResponse, PreguntaUpdate
 )
 from interview_analyzer import analyze_interview
 from passlib.context import CryptContext
@@ -137,9 +137,6 @@ def register(user: UsuariCreate, db: Session = Depends(get_db)):
     db.refresh(nou_usuari)
 
     return nou_usuari
-
-# pip install PyJWT --> in requirements.txt
-
 
 @app.post("/auth/login", tags=["Autenticació"])
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -309,7 +306,6 @@ def delete_user(
             detail="Usuari no trobat"
         )
         
-    # Eliminem l'usuari i guardem els canvis
     db.delete(user)
     db.commit()
     
@@ -445,6 +441,89 @@ def list_questions(
         preguntes = db.query(Pregunta).all()
         
     return preguntes
+
+@app.get("/preguntas/random", response_model=PreguntaResponse, tags=["Preguntes"])
+def get_random_question(
+    categoria_id: int, 
+    db: Session = Depends(get_db)
+):
+    """Retorna una pregunta aleatòria d'una categoria específica per començar l'entrevista."""
+    
+    # Busquem preguntes de la categoria i les ordenem a l'atzar
+    pregunta = db.query(Pregunta).filter(Pregunta.id_categoria == categoria_id).order_by(func.random()).first()
+    
+    if not pregunta:
+        raise HTTPException(
+            status_code=404, 
+            detail="No hi ha preguntes per a aquesta categoria o la categoria no existeix."
+        )
+        
+    return pregunta
+
+@app.put("/preguntas/{id}", response_model=PreguntaResponse, tags=["Preguntes"])
+def update_question_full(
+    id: int, 
+    pregunta_in: PreguntaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Reemplaça completament una pregunta (text i categoria obligatoris)."""
+    pregunta = db.query(Pregunta).filter(Pregunta.id == id).first()
+    if not pregunta:
+        raise HTTPException(status_code=404, detail="Pregunta no trobada")
+    
+    # Verifiquem que la nova categoria existeixi
+    cat = db.query(Categoria).filter(Categoria.id == pregunta_in.id_categoria).first()
+    if not cat:
+        raise HTTPException(status_code=400, detail="La categoria especificada no existeix.")
+
+    pregunta.text_pregunta = pregunta_in.text_pregunta
+    pregunta.id_categoria = pregunta_in.id_categoria
+    
+    db.commit()
+    db.refresh(pregunta)
+    return pregunta
+
+@app.patch("/preguntas/{id}", response_model=PreguntaResponse, tags=["Preguntes"])
+def update_question_partial(
+    id: int, 
+    pregunta_in: PreguntaUpdate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Modifica parcialment una pregunta (text o categoria opcionals)."""
+    pregunta = db.query(Pregunta).filter(Pregunta.id == id).first()
+    if not pregunta:
+        raise HTTPException(status_code=404, detail="Pregunta no trobada")
+    
+    # Si ens canvien la categoria, mirem que existeixi
+    if pregunta_in.id_categoria is not None:
+        cat = db.query(Categoria).filter(Categoria.id == pregunta_in.id_categoria).first()
+        if not cat:
+            raise HTTPException(status_code=400, detail="La categoria especificada no existeix.")
+        pregunta.id_categoria = pregunta_in.id_categoria
+
+    if pregunta_in.text_pregunta is not None:
+        pregunta.text_pregunta = pregunta_in.text_pregunta
+        
+    db.commit()
+    db.refresh(pregunta)
+    return pregunta
+
+@app.delete("/preguntas/{id}", tags=["Preguntes"])
+def delete_question(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Elimina una pregunta. Les entrevistes que la feien servir mantindran el registre però amb id_pregunta buit."""
+    pregunta = db.query(Pregunta).filter(Pregunta.id == id).first()
+    if not pregunta:
+        raise HTTPException(status_code=404, detail="Pregunta no trobada")
+    
+    db.delete(pregunta)
+    db.commit()
+    return {"message": f"Pregunta amb ID {id} eliminada correctament"}
 
 
 
