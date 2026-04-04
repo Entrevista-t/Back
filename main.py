@@ -108,10 +108,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 # 🔐 AUTENTICACIÓ
 # ==========================================
 
-#Things to add to docker container:
-# pip install email-validator --> for validating email formats in Pydantic models
-# pip install "passlib[bcrypt]" --> lbrary for hashing passwords securely (bcrypt algorithm)
-
 @app.post("/auth/register", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Autenticació"])
 def register(user: UsuariCreate, db: Session = Depends(get_db)):
     """Crea un compte nou (Registre)."""
@@ -617,7 +613,83 @@ def list_user_interviews(
     return entrevistes
 
 # ==========================================
-# ANÀLISI
+# 🎥 ENDPOINT PESAT D'ANÀLISI DE VÍDEO
+# ==========================================
+
+@app.post("/analyze", tags=["Anàlisi"])
+async def analyze(
+    video: UploadFile = File(..., description="Video file of the interview answer"),
+    question: str = Form(..., description="The interviewer's question text"),
+    language: str = Form("ca", description="Language hint for transcription"),
+    id_entrevista: int = Form(..., description="L'ID de l'entrevista pendent"), # NOU: Demanem l'ID
+    db: Session = Depends(get_db), # NOU: Ens connectem a la BD
+    usuari_actual: Usuari = Depends(get_current_user),
+):
+    """
+    Analitza el vídeo del candidat, extreu-ne les mètriques i les guarda a la base de dades.
+    """
+    
+    # 1. Busquem l'entrevista a la BD i comprovem que sigui del nostre usuari
+    entrevista = db.query(Entrevista).filter(Entrevista.id == id_entrevista).first()
+    if not entrevista:
+        raise HTTPException(status_code=404, detail="Entrevista no trobada")
+    if entrevista.id_usuari != usuari_actual.id:
+        raise HTTPException(status_code=403, detail="No tens permís per modificar aquesta entrevista")
+
+    # 2. Avisem a la BD que comencem a processar (per si el front-end pregunta l'estat)
+    entrevista.estat_proces = "processant"
+    db.commit()
+
+    tmp_path = None
+    try:
+        # Guardem el vídeo temporalment
+        suffix = os.path.splitext(video.filename or ".mp4")[1].lower()
+        if suffix not in ALLOWED_VIDEO_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Format de vídeo no suportat")
+        
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+            total = 0
+            while chunk := await video.read(1024 * 1024):
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="L'arxiu és massa gran")
+                tmp.write(chunk)
+
+        # 3. Executem TOTA la teva IA de cop en un fil separat (per no bloquejar l'API)
+        result = await asyncio.to_thread(analyze_interview, tmp_path, question, language)
+
+        # 4. EXCEŀLENT: Guardem els resultats a la BD i posem l'estat en completat
+        entrevista.metriques = result
+        entrevista.estat_proces = "completat"
+        db.commit()
+
+        return JSONResponse(content={
+            "message": "Anàlisi completat correctament",
+            "id_entrevista": entrevista.id,
+            "estat": entrevista.estat_proces
+        })
+
+    except HTTPException:
+        # Si hi ha hagut un error controlat (ex: arxiu massa gran), no toquem la BD
+        raise
+    except Exception as e:
+        # Si la IA peta, posem l'estat a error perquè l'usuari no es quedi esperant eternament
+        logger.error("Analysis endpoint error: %s", e)
+        entrevista.estat_proces = "error"
+        db.commit()
+        raise HTTPException(status_code=500, detail="L'anàlisi del vídeo ha fallat.")
+
+    finally:
+        # 5. Esborrem el vídeo pesat per no omplir el disc dur del servidor
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+# ==========================================
+# ENDPOINTS DE PROVA
 # ==========================================
 
 @app.get("/test-db")
@@ -629,51 +701,6 @@ def test_db_connection(db: Session = Depends(get_db), _user: Usuari = Depends(ge
             return {"status": "Connexió a PostgreSQL perfecta! 🎉"}
     except Exception as e:
         return {"status": "Error connectant a la BD", "detall": str(e)}
-    
-@app.post("/analyze")
-async def analyze(
-    video: UploadFile = File(..., description="Video file of the interview answer"),
-    question: str = Form(..., description="The interviewer's question text"),
-    language: str = Form("ca", description="Language hint for transcription"),
-    usuari_actual: Usuari = Depends(get_current_user),
-):
-    """
-    Analyze a candidate's interview video.
-
-    Accepts a video file and the interviewer's question, then returns
-    audio, text, and video metrics evaluating the candidate's performance.
-    """
-    tmp_path = None
-    try:
-        # Save uploaded video to a temp file with size limit
-        suffix = os.path.splitext(video.filename or ".mp4")[1].lower()
-        if suffix not in ALLOWED_VIDEO_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="Unsupported file format")
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp_path = tmp.name
-            total = 0
-            while chunk := await video.read(1024 * 1024):
-                total += len(chunk)
-                if total > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail="File too large")
-                tmp.write(chunk)
-
-        # Run the blocking analysis pipeline in a thread to avoid freezing the event loop
-        result = await asyncio.to_thread(analyze_interview, tmp_path, question, language)
-        return JSONResponse(content=result)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Analysis endpoint error: %s", e)
-        raise HTTPException(status_code=500, detail="Analysis failed")
-
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
 
 @app.get("/health", tags=["health"])
 def health() -> dict[str, str]:
