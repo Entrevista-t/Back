@@ -70,6 +70,10 @@ class CategoriaResponse(CategoriaBase):
     
     model_config = {"from_attributes": True}
 
+class CategoriaUpdate(BaseModel):
+    nom: Optional[str] = None
+    descripcio: Optional[str] = None
+
 
 # ==========================================
 # ❓ PREGUNTES

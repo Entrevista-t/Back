@@ -8,7 +8,7 @@ from db.database import get_db, engine, Base
 from db.models import Usuari, Categoria, Pregunta
 from db.schemas import (
     UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
-    CategoriaCreate, CategoriaResponse,
+    CategoriaCreate, CategoriaResponse, CategoriaUpdate,
     PreguntaCreate, PreguntaResponse
 )
 from interview_analyzer import analyze_interview
@@ -320,12 +320,82 @@ def delete_user(
 # ==========================================
 
 @app.get("/categorias", response_model=List[CategoriaResponse], tags=["Categories"])
-def get_categories(db: Session = Depends(get_db)):
-    """Retorna totes les categories disponibles a la base de dades."""
-    
-    # Busquem totes les categories a la taula
+def list_categories(db: Session = Depends(get_db)):
+    """Llista totes les categories disponibles a la base de dades."""
     categories = db.query(Categoria).all()
     return categories
+
+@app.post("/categorias", response_model=CategoriaResponse, status_code=status.HTTP_201_CREATED, tags=["Categories"])
+def create_category(
+    categoria: CategoriaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Crea una nova categoria a la base de dades."""
+    db_categoria = db.query(Categoria).filter(Categoria.nom == categoria.nom).first()
+    if db_categoria:
+        raise HTTPException(status_code=400, detail="Aquesta categoria ja existeix.")
+    
+    nova_categoria = Categoria(nom=categoria.nom, descripcio=categoria.descripcio)
+    db.add(nova_categoria)
+    db.commit()
+    db.refresh(nova_categoria)
+    return nova_categoria
+
+@app.put("/categorias/{id}", response_model=CategoriaResponse, tags=["Categories"])
+def update_category_full(
+    id: int, 
+    cat_in: CategoriaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Reemplaça completament una categoria (nom i descripció obligatoris)."""
+    categoria = db.query(Categoria).filter(Categoria.id == id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoria no trobada")
+    
+    categoria.nom = cat_in.nom
+    categoria.descripcio = cat_in.descripcio
+    
+    db.commit()
+    db.refresh(categoria)
+    return categoria
+
+@app.patch("/categorias/{id}", response_model=CategoriaResponse, tags=["Categories"])
+def update_category_partial(
+    id: int, 
+    cat_in: CategoriaUpdate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Modifica parcialment una categoria (nom o descripció opcionals)."""
+    categoria = db.query(Categoria).filter(Categoria.id == id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoria no trobada")
+    
+    if cat_in.nom is not None:
+        categoria.nom = cat_in.nom
+    if cat_in.descripcio is not None:
+        categoria.descripcio = cat_in.descripcio
+        
+    db.commit()
+    db.refresh(categoria)
+    return categoria
+
+@app.delete("/categorias/{id}", tags=["Categories"])
+def delete_category(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Elimina una categoria. Les preguntes associades passaran a tenir la categoria NULL."""
+    categoria = db.query(Categoria).filter(Categoria.id == id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoria no trobada")
+    
+    db.delete(categoria)
+    db.commit()
+    return {"message": f"Categoria '{categoria.nom}' eliminada correctament"}
 
 # ==========================================
 # ❓ PREGUNTES
