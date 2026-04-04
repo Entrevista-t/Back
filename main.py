@@ -5,9 +5,9 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from db.database import get_db, engine, Base
-from db.models import Usuari, Categoria, Pregunta
+from db.models import Entrevista, Usuari, Categoria, Pregunta
 from db.schemas import (
-    UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
+    EntrevistaCreate, EntrevistaResponse, UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
     CategoriaCreate, CategoriaResponse, CategoriaUpdate,
     PreguntaCreate, PreguntaResponse, PreguntaUpdate
 )
@@ -526,38 +526,99 @@ def delete_question(
     return {"message": f"Pregunta amb ID {id} eliminada correctament"}
 
 
-
 # ==========================================
-# 🎥 ENTREVISTES / ANÀLISI
+# 🎥 ENTREVISTES
 # ==========================================
 
-@app.post("/entrevistas", tags=["Entrevistes"])
-def upload_interview(usuari_actual: Usuari = Depends(get_current_user)):
-    """Rep l'arxiu de vídeo/àudio. Retorna l'ID de l'entrevista i un estat inicial."""
-    return {
-        "id_entrevista": 101, 
-        # "filename": file.filename, 
-        "status": "processant"
-    }
+@app.post("/entrevistas", response_model=EntrevistaResponse, status_code=status.HTTP_201_CREATED, tags=["Entrevistes"])
+def create_interview(
+    entrevista_in: EntrevistaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """
+    Crea un nou registre d'entrevista en estat 'pendent'.
+    Es crida quan l'usuari accepta la pregunta i es disposa a gravar.
+    """
+    if entrevista_in.id_pregunta:
+        pregunta = db.query(Pregunta).filter(Pregunta.id == entrevista_in.id_pregunta).first()
+        if not pregunta:
+            raise HTTPException(status_code=404, detail="La pregunta especificada no existeix.")
 
-@app.get("/entrevistas/{id}", tags=["Entrevistes"])
-def get_interview_status(id: int, usuari_actual: Usuari = Depends(get_current_user)):
-    """Retorna els detalls d'una entrevista. Aquí el front comprovarà l'estat i rebrà mètriques crues."""
-    return {"id": id, "status": "completat", "metriques": "..."}
+    nova_entrevista = Entrevista(
+        id_usuari=usuari_actual.id,
+        id_pregunta=entrevista_in.id_pregunta,
+        estat_proces="pendent" # Inicialment no hi ha vídeo ni anàlisi
+    )
+    
+    db.add(nova_entrevista)
+    db.commit()
+    db.refresh(nova_entrevista)
+    return nova_entrevista
+
+@app.get("/entrevistas/me", response_model=List[EntrevistaResponse], tags=["Entrevistes"])
+def list_my_interviews(
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Retorna l'historial d'entrevistes de l'usuari que ha fet login."""
+    return db.query(Entrevista).filter(Entrevista.id_usuari == usuari_actual.id).all()
+
+@app.get("/entrevistas/{id}", response_model=EntrevistaResponse, tags=["Entrevistes"])
+def get_interview_detail(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Retorna els detalls (estat, mètriques, etc.) d'una entrevista concreta."""
+    entrevista = db.query(Entrevista).filter(Entrevista.id == id).first()
+    
+    if not entrevista:
+        raise HTTPException(status_code=404, detail="Entrevista no trobada")
+        
+    if entrevista.id_usuari != usuari_actual.id:
+        raise HTTPException(status_code=403, detail="No tens permís per veure aquesta entrevista")
+        
+    return entrevista
 
 @app.get("/entrevistas/{id}/informe", tags=["Entrevistes"])
-def get_interview_report(id: int, usuari_actual: Usuari = Depends(get_current_user)):
+def get_interview_report(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
     """Retorna les dades processades i estructurades per generar gràfiques al frontend."""
-    return {"id": id, "informe": "Dades estructurades per a gràfiques"}
+    entrevista = db.query(Entrevista).filter(Entrevista.id == id).first()
+    
+    if not entrevista:
+        raise HTTPException(status_code=404, detail="Entrevista no trobada")
+        
+    if entrevista.id_usuari != usuari_actual.id:
+        raise HTTPException(status_code=403, detail="No tens permís per veure aquest informe")
 
-@app.get("/usuarios/{id}/entrevistas", tags=["Entrevistes"])
-def list_user_interviews(id: int, usuari_actual: Usuari = Depends(get_current_user)):
+    return {
+        "id_entrevista": entrevista.id,
+        "estat_proces": entrevista.estat_proces,
+        "metriques": entrevista.metriques
+    }
+
+@app.get("/usuarios/{id}/entrevistas", response_model=List[EntrevistaResponse], tags=["Entrevistes"])
+def list_user_interviews(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
     """Llista l'historial de totes les entrevistes gravades per un usuari concret."""
-    return [
-        {"id_entrevista": 101, "usuari_id": id, "data": "2024-03-20"},
-        {"id_entrevista": 102, "usuari_id": id, "data": "2024-03-21"}
-    ]
+    # Seguretat: només pot veure el seu propi historial
+    if usuari_actual.id != id:
+        raise HTTPException(status_code=403, detail="No pots veure les entrevistes d'un altre usuari")
+        
+    entrevistes = db.query(Entrevista).filter(Entrevista.id_usuari == id).all()
+    return entrevistes
 
+# ==========================================
+# ANÀLISI
+# ==========================================
 
 @app.get("/test-db")
 def test_db_connection(db: Session = Depends(get_db), _user: Usuari = Depends(get_current_user)):
