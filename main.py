@@ -692,15 +692,15 @@ async def analyze(
 # ENDPOINTS DE PROVA
 # ==========================================
 
-@app.get("/test-db")
-def test_db_connection(db: Session = Depends(get_db), _user: Usuari = Depends(get_current_user)):
-    try:
-        # Fem una consulta SQL purament de prova
-        result = db.execute(text("SELECT 1")).scalar()
-        if result == 1:
-            return {"status": "Connexió a PostgreSQL perfecta! 🎉"}
-    except Exception as e:
-        return {"status": "Error connectant a la BD", "detall": str(e)}
+# @app.get("/test-db")
+# def test_db_connection(db: Session = Depends(get_db), _user: Usuari = Depends(get_current_user)):
+#     try:
+#         # Fem una consulta SQL purament de prova
+#         result = db.execute(text("SELECT 1")).scalar()
+#         if result == 1:
+#             return {"status": "Connexió a PostgreSQL perfecta! 🎉"}
+#     except Exception as e:
+#         return {"status": "Error connectant a la BD", "detall": str(e)}
 
 @app.get("/health", tags=["health"])
 def health() -> dict[str, str]:
