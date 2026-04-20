@@ -70,6 +70,10 @@ class CategoriaResponse(CategoriaBase):
     
     model_config = {"from_attributes": True}
 
+class CategoriaUpdate(BaseModel):
+    nom: Optional[str] = None
+    descripcio: Optional[str] = None
+
 
 # ==========================================
 # ❓ PREGUNTES
@@ -85,5 +89,31 @@ class PreguntaCreate(PreguntaBase):
 
 class PreguntaResponse(PreguntaBase):
     id: int
+
+    model_config = {"from_attributes": True}
+
+class PreguntaUpdate(BaseModel):
+    text_pregunta: Optional[str] = None
+    id_categoria: Optional[int] = None
+
+# ==========================================
+# 🎥 ENTREVISTES
+# ==========================================
+
+class EntrevistaBase(BaseModel):
+    id_pregunta: Optional[int] = None
+
+class EntrevistaCreate(EntrevistaBase):
+    # Quan l'usuari tria una pregunta per començar, només ens envia el seu ID
+    pass
+
+class EntrevistaResponse(EntrevistaBase):
+    id: int
+    id_usuari: int
+    data_hora: datetime
+    url_video: Optional[str] = None
+    url_informe_pdf: Optional[str] = None
+    estat_proces: str
+    metriques: Optional[dict] = None # Recorda que a models.py és JSONB
 
     model_config = {"from_attributes": True}

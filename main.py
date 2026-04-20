@@ -5,11 +5,11 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from db.database import get_db, engine, Base
-from db.models import Usuari, Categoria, Pregunta
+from db.models import Entrevista, Usuari, Categoria, Pregunta
 from db.schemas import (
-    UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
-    CategoriaCreate, CategoriaResponse,
-    PreguntaCreate, PreguntaResponse
+    EntrevistaCreate, EntrevistaResponse, UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
+    CategoriaCreate, CategoriaResponse, CategoriaUpdate,
+    PreguntaCreate, PreguntaResponse, PreguntaUpdate
 )
 from interview_analyzer import analyze_interview
 from passlib.context import CryptContext
@@ -45,7 +45,7 @@ app = FastAPI(
 # Configure CORS to allow requests from frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://entrevistat.kire.ovh", "http://localhost:3000", "http://localhost:5173"],  # Allow frontend origins
+    allow_origins=["https://entrevistat.kire.ovh", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080"],  # Allow frontend origins
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],  # Allow all headers
@@ -108,10 +108,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 # 🔐 AUTENTICACIÓ
 # ==========================================
 
-#Things to add to docker container:
-# pip install email-validator --> for validating email formats in Pydantic models
-# pip install "passlib[bcrypt]" --> lbrary for hashing passwords securely (bcrypt algorithm)
-
 @app.post("/auth/register", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Autenticació"])
 def register(user: UsuariCreate, db: Session = Depends(get_db)):
     """Crea un compte nou (Registre)."""
@@ -137,9 +133,6 @@ def register(user: UsuariCreate, db: Session = Depends(get_db)):
     db.refresh(nou_usuari)
 
     return nou_usuari
-
-# pip install PyJWT --> in requirements.txt
-
 
 @app.post("/auth/login", tags=["Autenticació"])
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -309,7 +302,6 @@ def delete_user(
             detail="Usuari no trobat"
         )
         
-    # Eliminem l'usuari i guardem els canvis
     db.delete(user)
     db.commit()
     
@@ -320,12 +312,82 @@ def delete_user(
 # ==========================================
 
 @app.get("/categorias", response_model=List[CategoriaResponse], tags=["Categories"])
-def get_categories(db: Session = Depends(get_db)):
-    """Retorna totes les categories disponibles a la base de dades."""
-    
-    # Busquem totes les categories a la taula
+def list_categories(db: Session = Depends(get_db)):
+    """Llista totes les categories disponibles a la base de dades."""
     categories = db.query(Categoria).all()
     return categories
+
+@app.post("/categorias", response_model=CategoriaResponse, status_code=status.HTTP_201_CREATED, tags=["Categories"])
+def create_category(
+    categoria: CategoriaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Crea una nova categoria a la base de dades."""
+    db_categoria = db.query(Categoria).filter(Categoria.nom == categoria.nom).first()
+    if db_categoria:
+        raise HTTPException(status_code=400, detail="Aquesta categoria ja existeix.")
+    
+    nova_categoria = Categoria(nom=categoria.nom, descripcio=categoria.descripcio)
+    db.add(nova_categoria)
+    db.commit()
+    db.refresh(nova_categoria)
+    return nova_categoria
+
+@app.put("/categorias/{id}", response_model=CategoriaResponse, tags=["Categories"])
+def update_category_full(
+    id: int, 
+    cat_in: CategoriaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Reemplaça completament una categoria (nom i descripció obligatoris)."""
+    categoria = db.query(Categoria).filter(Categoria.id == id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoria no trobada")
+    
+    categoria.nom = cat_in.nom
+    categoria.descripcio = cat_in.descripcio
+    
+    db.commit()
+    db.refresh(categoria)
+    return categoria
+
+@app.patch("/categorias/{id}", response_model=CategoriaResponse, tags=["Categories"])
+def update_category_partial(
+    id: int, 
+    cat_in: CategoriaUpdate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Modifica parcialment una categoria (nom o descripció opcionals)."""
+    categoria = db.query(Categoria).filter(Categoria.id == id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoria no trobada")
+    
+    if cat_in.nom is not None:
+        categoria.nom = cat_in.nom
+    if cat_in.descripcio is not None:
+        categoria.descripcio = cat_in.descripcio
+        
+    db.commit()
+    db.refresh(categoria)
+    return categoria
+
+@app.delete("/categorias/{id}", tags=["Categories"])
+def delete_category(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user) # 🔒 Protegit
+):
+    """Elimina una categoria. Les preguntes associades passaran a tenir la categoria NULL."""
+    categoria = db.query(Categoria).filter(Categoria.id == id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoria no trobada")
+    
+    db.delete(categoria)
+    db.commit()
+    return {"message": f"Categoria '{categoria.nom}' eliminada correctament"}
 
 # ==========================================
 # ❓ PREGUNTES
@@ -376,94 +438,269 @@ def list_questions(
         
     return preguntes
 
+@app.get("/preguntas/random", response_model=PreguntaResponse, tags=["Preguntes"])
+def get_random_question(
+    categoria_id: int, 
+    db: Session = Depends(get_db)
+):
+    """Retorna una pregunta aleatòria d'una categoria específica per començar l'entrevista."""
+    
+    # Busquem preguntes de la categoria i les ordenem a l'atzar
+    pregunta = db.query(Pregunta).filter(Pregunta.id_categoria == categoria_id).order_by(func.random()).first()
+    
+    if not pregunta:
+        raise HTTPException(
+            status_code=404, 
+            detail="No hi ha preguntes per a aquesta categoria o la categoria no existeix."
+        )
+        
+    return pregunta
+
+@app.put("/preguntas/{id}", response_model=PreguntaResponse, tags=["Preguntes"])
+def update_question_full(
+    id: int, 
+    pregunta_in: PreguntaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Reemplaça completament una pregunta (text i categoria obligatoris)."""
+    pregunta = db.query(Pregunta).filter(Pregunta.id == id).first()
+    if not pregunta:
+        raise HTTPException(status_code=404, detail="Pregunta no trobada")
+    
+    # Verifiquem que la nova categoria existeixi
+    cat = db.query(Categoria).filter(Categoria.id == pregunta_in.id_categoria).first()
+    if not cat:
+        raise HTTPException(status_code=400, detail="La categoria especificada no existeix.")
+
+    pregunta.text_pregunta = pregunta_in.text_pregunta
+    pregunta.id_categoria = pregunta_in.id_categoria
+    
+    db.commit()
+    db.refresh(pregunta)
+    return pregunta
+
+@app.patch("/preguntas/{id}", response_model=PreguntaResponse, tags=["Preguntes"])
+def update_question_partial(
+    id: int, 
+    pregunta_in: PreguntaUpdate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Modifica parcialment una pregunta (text o categoria opcionals)."""
+    pregunta = db.query(Pregunta).filter(Pregunta.id == id).first()
+    if not pregunta:
+        raise HTTPException(status_code=404, detail="Pregunta no trobada")
+    
+    # Si ens canvien la categoria, mirem que existeixi
+    if pregunta_in.id_categoria is not None:
+        cat = db.query(Categoria).filter(Categoria.id == pregunta_in.id_categoria).first()
+        if not cat:
+            raise HTTPException(status_code=400, detail="La categoria especificada no existeix.")
+        pregunta.id_categoria = pregunta_in.id_categoria
+
+    if pregunta_in.text_pregunta is not None:
+        pregunta.text_pregunta = pregunta_in.text_pregunta
+        
+    db.commit()
+    db.refresh(pregunta)
+    return pregunta
+
+@app.delete("/preguntas/{id}", tags=["Preguntes"])
+def delete_question(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Elimina una pregunta. Les entrevistes que la feien servir mantindran el registre però amb id_pregunta buit."""
+    pregunta = db.query(Pregunta).filter(Pregunta.id == id).first()
+    if not pregunta:
+        raise HTTPException(status_code=404, detail="Pregunta no trobada")
+    
+    db.delete(pregunta)
+    db.commit()
+    return {"message": f"Pregunta amb ID {id} eliminada correctament"}
 
 
 # ==========================================
-# 🎥 ENTREVISTES / ANÀLISI
+# 🎥 ENTREVISTES
 # ==========================================
 
-@app.post("/entrevistas", tags=["Entrevistes"])
-def upload_interview(usuari_actual: Usuari = Depends(get_current_user)):
-    """Rep l'arxiu de vídeo/àudio. Retorna l'ID de l'entrevista i un estat inicial."""
-    return {
-        "id_entrevista": 101, 
-        # "filename": file.filename, 
-        "status": "processant"
-    }
+@app.post("/entrevistas", response_model=EntrevistaResponse, status_code=status.HTTP_201_CREATED, tags=["Entrevistes"])
+def create_interview(
+    entrevista_in: EntrevistaCreate, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """
+    Crea un nou registre d'entrevista en estat 'pendent'.
+    Es crida quan l'usuari accepta la pregunta i es disposa a gravar.
+    """
+    if entrevista_in.id_pregunta:
+        pregunta = db.query(Pregunta).filter(Pregunta.id == entrevista_in.id_pregunta).first()
+        if not pregunta:
+            raise HTTPException(status_code=404, detail="La pregunta especificada no existeix.")
 
-@app.get("/entrevistas/{id}", tags=["Entrevistes"])
-def get_interview_status(id: int, usuari_actual: Usuari = Depends(get_current_user)):
-    """Retorna els detalls d'una entrevista. Aquí el front comprovarà l'estat i rebrà mètriques crues."""
-    return {"id": id, "status": "completat", "metriques": "..."}
+    nova_entrevista = Entrevista(
+        id_usuari=usuari_actual.id,
+        id_pregunta=entrevista_in.id_pregunta,
+        estat_proces="pendent" # Inicialment no hi ha vídeo ni anàlisi
+    )
+    
+    db.add(nova_entrevista)
+    db.commit()
+    db.refresh(nova_entrevista)
+    return nova_entrevista
+
+@app.get("/entrevistas/me", response_model=List[EntrevistaResponse], tags=["Entrevistes"])
+def list_my_interviews(
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Retorna l'historial d'entrevistes de l'usuari que ha fet login."""
+    return db.query(Entrevista).filter(Entrevista.id_usuari == usuari_actual.id).all()
+
+@app.get("/entrevistas/{id}", response_model=EntrevistaResponse, tags=["Entrevistes"])
+def get_interview_detail(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Retorna els detalls (estat, mètriques, etc.) d'una entrevista concreta."""
+    entrevista = db.query(Entrevista).filter(Entrevista.id == id).first()
+    
+    if not entrevista:
+        raise HTTPException(status_code=404, detail="Entrevista no trobada")
+        
+    if entrevista.id_usuari != usuari_actual.id:
+        raise HTTPException(status_code=403, detail="No tens permís per veure aquesta entrevista")
+        
+    return entrevista
 
 @app.get("/entrevistas/{id}/informe", tags=["Entrevistes"])
-def get_interview_report(id: int, usuari_actual: Usuari = Depends(get_current_user)):
+def get_interview_report(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
     """Retorna les dades processades i estructurades per generar gràfiques al frontend."""
-    return {"id": id, "informe": "Dades estructurades per a gràfiques"}
-
-@app.get("/usuarios/{id}/entrevistas", tags=["Entrevistes"])
-def list_user_interviews(id: int, usuari_actual: Usuari = Depends(get_current_user)):
-    """Llista l'historial de totes les entrevistes gravades per un usuari concret."""
-    return [
-        {"id_entrevista": 101, "usuari_id": id, "data": "2024-03-20"},
-        {"id_entrevista": 102, "usuari_id": id, "data": "2024-03-21"}
-    ]
-
-
-@app.get("/test-db")
-def test_db_connection(db: Session = Depends(get_db), _user: Usuari = Depends(get_current_user)):
-    try:
-        # Fem una consulta SQL purament de prova
-        result = db.execute(text("SELECT 1")).scalar()
-        if result == 1:
-            return {"status": "Connexió a PostgreSQL perfecta! 🎉"}
-    except Exception as e:
-        return {"status": "Error connectant a la BD", "detall": str(e)}
+    entrevista = db.query(Entrevista).filter(Entrevista.id == id).first()
     
-@app.post("/analyze")
+    if not entrevista:
+        raise HTTPException(status_code=404, detail="Entrevista no trobada")
+        
+    if entrevista.id_usuari != usuari_actual.id:
+        raise HTTPException(status_code=403, detail="No tens permís per veure aquest informe")
+
+    return {
+        "id_entrevista": entrevista.id,
+        "estat_proces": entrevista.estat_proces,
+        "metriques": entrevista.metriques
+    }
+
+@app.get("/usuarios/{id}/entrevistas", response_model=List[EntrevistaResponse], tags=["Entrevistes"])
+def list_user_interviews(
+    id: int, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Llista l'historial de totes les entrevistes gravades per un usuari concret."""
+    # Seguretat: només pot veure el seu propi historial
+    if usuari_actual.id != id:
+        raise HTTPException(status_code=403, detail="No pots veure les entrevistes d'un altre usuari")
+        
+    entrevistes = db.query(Entrevista).filter(Entrevista.id_usuari == id).all()
+    return entrevistes
+
+# ==========================================
+# 🎥 ENDPOINT PESAT D'ANÀLISI DE VÍDEO
+# ==========================================
+
+@app.post("/analyze", tags=["Anàlisi"])
 async def analyze(
     video: UploadFile = File(..., description="Video file of the interview answer"),
     question: str = Form(..., description="The interviewer's question text"),
     language: str = Form("ca", description="Language hint for transcription"),
+    id_entrevista: int = Form(..., description="L'ID de l'entrevista pendent"), # NOU: Demanem l'ID
+    db: Session = Depends(get_db), # NOU: Ens connectem a la BD
     usuari_actual: Usuari = Depends(get_current_user),
 ):
     """
-    Analyze a candidate's interview video.
-
-    Accepts a video file and the interviewer's question, then returns
-    audio, text, and video metrics evaluating the candidate's performance.
+    Analitza el vídeo del candidat, extreu-ne les mètriques i les guarda a la base de dades.
     """
+    
+    # 1. Busquem l'entrevista a la BD i comprovem que sigui del nostre usuari
+    entrevista = db.query(Entrevista).filter(Entrevista.id == id_entrevista).first()
+    if not entrevista:
+        raise HTTPException(status_code=404, detail="Entrevista no trobada")
+    if entrevista.id_usuari != usuari_actual.id:
+        raise HTTPException(status_code=403, detail="No tens permís per modificar aquesta entrevista")
+
+    # 2. Avisem a la BD que comencem a processar (per si el front-end pregunta l'estat)
+    entrevista.estat_proces = "processant"
+    db.commit()
+
     tmp_path = None
     try:
-        # Save uploaded video to a temp file with size limit
+        # Guardem el vídeo temporalment
         suffix = os.path.splitext(video.filename or ".mp4")[1].lower()
         if suffix not in ALLOWED_VIDEO_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="Unsupported file format")
+            raise HTTPException(status_code=400, detail="Format de vídeo no suportat")
+        
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp_path = tmp.name
             total = 0
             while chunk := await video.read(1024 * 1024):
                 total += len(chunk)
                 if total > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail="File too large")
+                    raise HTTPException(status_code=413, detail="L'arxiu és massa gran")
                 tmp.write(chunk)
 
-        # Run the blocking analysis pipeline in a thread to avoid freezing the event loop
+        # 3. Executem TOTA la teva IA de cop en un fil separat (per no bloquejar l'API)
         result = await asyncio.to_thread(analyze_interview, tmp_path, question, language)
-        return JSONResponse(content=result)
+
+        # 4. EXCEŀLENT: Guardem els resultats a la BD i posem l'estat en completat
+        entrevista.metriques = result
+        entrevista.estat_proces = "completat"
+        db.commit()
+
+        return JSONResponse(content={
+            "message": "Anàlisi completat correctament",
+            "id_entrevista": entrevista.id,
+            "estat": entrevista.estat_proces
+        })
 
     except HTTPException:
+        # Si hi ha hagut un error controlat (ex: arxiu massa gran), no toquem la BD
         raise
     except Exception as e:
+        # Si la IA peta, posem l'estat a error perquè l'usuari no es quedi esperant eternament
         logger.error("Analysis endpoint error: %s", e)
-        raise HTTPException(status_code=500, detail="Analysis failed")
+        entrevista.estat_proces = "error"
+        db.commit()
+        raise HTTPException(status_code=500, detail="L'anàlisi del vídeo ha fallat.")
 
     finally:
+        # 5. Esborrem el vídeo pesat per no omplir el disc dur del servidor
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
             except OSError:
                 pass
+
+# ==========================================
+# ENDPOINTS DE PROVA
+# ==========================================
+
+# @app.get("/test-db")
+# def test_db_connection(db: Session = Depends(get_db), _user: Usuari = Depends(get_current_user)):
+#     try:
+#         # Fem una consulta SQL purament de prova
+#         result = db.execute(text("SELECT 1")).scalar()
+#         if result == 1:
+#             return {"status": "Connexió a PostgreSQL perfecta! 🎉"}
+#     except Exception as e:
+#         return {"status": "Error connectant a la BD", "detall": str(e)}
 
 @app.get("/health", tags=["health"])
 def health() -> dict[str, str]:

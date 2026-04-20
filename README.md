@@ -11,6 +11,7 @@
     <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi" alt="FastAPI" />
     <img src="https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white" alt="PostgreSQL" />
     <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker" alt="Docker" />
+    <img src="https://img.shields.io/badge/Groq-Whisper_v3-F55036" alt="Groq Whisper" />
     <img src="https://img.shields.io/badge/API_Language-Català-FFCD00" alt="Catalan" />
   </p>
 
@@ -67,22 +68,25 @@ API tags and docstrings are written in **Catalan (Català)**. Code, comments, an
 
 ```
 Video upload → Audio extraction (ffmpeg)
-  → Whisper transcription → NLP metrics (7 dimensions)
+  → Transcription (Groq cloud → faster-whisper fallback)
+    → NLP metrics (7 dimensions)
   → Audio DSP metrics (speech time, pauses, rhythm)
   → Emotion detection (DeepFace + MediaPipe)
-    → Unified JSON response
+    → Unified JSON response → PostgreSQL (JSONB)
 ```
 
 ### Key Features
 
-- 🎙️ **Speech-to-text** — Whisper transcription with Catalan language support
+- 🎙️ **Speech-to-text** — Two-tier transcription: Groq cloud API (whisper-large-v3) as primary, local faster-whisper (medium, CPU/int8) as fallback. Catalan-optimised
 - 📝 **7 NLP metrics** — question alignment, coherence, information density, specificity, lexical richness, confidence index, communication rhythm (WPM)
 - 🎵 **Audio analysis** — active speech time, pause detection, phonation ratio via librosa
 - 😊 **Emotion detection** — frame-by-frame DeepFace analysis with MediaPipe face mesh, calibrated baselines
-- 🔐 **JWT authentication** — bcrypt password hashing, token-based auth
+- 🔐 **JWT authentication** — bcrypt password hashing, token-based auth (24 h expiry)
 - 🗄️ **PostgreSQL** — SQLAlchemy ORM with JSONB metrics storage
+- 📧 **Email notifications** — interview results delivered via Resend
 - 🐳 **Two-layer Docker** — heavy ML base image (rarely rebuilt) + lightweight API image (fast iterations)
 - 🚀 **CI/CD** — GitHub Actions pipeline with conditional ML base rebuild and Docker Swarm deployment
+- 🔒 **Full CRUD** — complete REST endpoints for users, categories, questions, and interviews with role-based access control
 
 ---
 
@@ -90,27 +94,70 @@ Video upload → Audio extraction (ffmpeg)
 
 ### API Endpoints
 
-| Method | Path | Tag | Status |
-|--------|------|-----|--------|
-| POST | `/auth/register` | Autenticació | ✅ Implemented |
-| POST | `/auth/login` | Autenticació | ✅ Implemented |
-| GET | `/usuarios/me` | Usuaris | ⚠️ Stub |
-| POST | `/usuarios` | Usuaris | ⚠️ Stub |
-| GET | `/usuarios` | Usuaris | ⚠️ Stub |
-| GET | `/usuarios/{id}` | Usuaris | ⚠️ Stub |
-| PUT | `/usuarios/{id}` | Usuaris | ⚠️ Stub |
-| PATCH | `/usuarios/{id}` | Usuaris | ⚠️ Stub |
-| DELETE | `/usuarios/{id}` | Usuaris | ⚠️ Stub |
-| POST | `/entrevistas` | Entrevistes | ⚠️ Stub |
-| GET | `/entrevistas/{id}` | Entrevistes | ⚠️ Stub |
-| GET | `/entrevistas/{id}/informe` | Entrevistes | ⚠️ Stub |
-| GET | `/usuarios/{id}/entrevistas` | Entrevistes | ⚠️ Stub |
-| GET | `/preguntas` | Preguntes | ⚠️ Stub |
-| POST | `/analyze` | — | ✅ Implemented |
-| GET | `/test-db` | — | ✅ Implemented |
-| GET | `/health` | health | ✅ Implemented |
+#### 🔐 Authentication
 
-> ⚠️ Most CRUD routes are stubs returning mock data. The core implemented endpoints are `/auth/*`, `/analyze`, `/health`, and `/test-db`.
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/register` | Public | Create a new account |
+| POST | `/auth/login` | Public | Authenticate and receive JWT token |
+
+#### 👤 Users (Usuaris)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/usuarios/me` | 🔒 JWT | Get current user's profile |
+| POST | `/usuarios` | 🔒 JWT | Create a user (internal) |
+| GET | `/usuarios` | 🔒 JWT | List all users |
+| GET | `/usuarios/{id}` | 🔒 JWT | Get user by ID |
+| PUT | `/usuarios/{id}` | 🔒 Owner | Full update (nom, email, password) |
+| PATCH | `/usuarios/{id}` | 🔒 Owner | Partial update |
+| DELETE | `/usuarios/{id}` | 🔒 Owner | Delete user |
+
+#### 🏷️ Categories (Categories)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/categorias` | Public | List all categories |
+| POST | `/categorias` | 🔒 JWT | Create a category |
+| PUT | `/categorias/{id}` | 🔒 JWT | Full update |
+| PATCH | `/categorias/{id}` | 🔒 JWT | Partial update |
+| DELETE | `/categorias/{id}` | 🔒 JWT | Delete category |
+
+#### ❓ Questions (Preguntes)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/preguntas` | Public | List questions (optional `?categoria_id=` filter) |
+| GET | `/preguntas/random?categoria_id=` | Public | Random question from a category |
+| POST | `/preguntas` | 🔒 JWT | Create a question |
+| PUT | `/preguntas/{id}` | 🔒 JWT | Full update |
+| PATCH | `/preguntas/{id}` | 🔒 JWT | Partial update |
+| DELETE | `/preguntas/{id}` | 🔒 JWT | Delete question |
+
+#### 🎥 Interviews (Entrevistes)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/entrevistas` | 🔒 JWT | Create interview record (status: `pendent`) |
+| GET | `/entrevistas/me` | 🔒 JWT | List current user's interviews |
+| GET | `/entrevistas/{id}` | 🔒 Owner | Get interview details + metrics |
+| GET | `/entrevistas/{id}/informe` | 🔒 Owner | Get structured report data for charts |
+| GET | `/usuarios/{id}/entrevistas` | 🔒 Owner | List a user's interview history |
+
+#### 🧠 Analysis
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/analyze` | 🔒 JWT | Upload video + run full AI analysis pipeline |
+
+> **`/analyze`** accepts `multipart/form-data` with fields: `video` (file), `question` (text), `language` (default: `ca`), `id_entrevista` (int). Max upload: 500 MB. Allowed formats: `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`, `.m4v`, `.wmv`.
+
+#### ⚙️ System
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | Public | Health check |
+| GET | `/` | Public | Redirect to Swagger UI (`/docs`) |
 
 ### Database Schema
 
@@ -124,18 +171,32 @@ Pregunta (1) ──→ (N) Entrevista
 |-------|-------------|
 | `usuaris` | id, nom, email, password (bcrypt), data_creacio |
 | `categories` | id, nom, descripcio |
-| `preguntes` | id, id_categoria (FK), text_pregunta |
-| `entrevistes` | id, id_usuari (FK), id_pregunta (FK), data_hora, url_video, estat_proces, metriques (JSONB) |
+| `preguntes` | id, id_categoria (FK → categories), text_pregunta |
+| `entrevistes` | id, id_usuari (FK → usuaris), id_pregunta (FK → preguntes), data_hora, url_video, url_informe_pdf, estat_proces, metriques (JSONB) |
+
+**Interview states** (`estat_proces`): `pendent` → `processant` → `completat` | `error`
 
 ### Analysis Modules
 
 | Module | Purpose | Key Output |
 |--------|---------|------------|
 | `audio.py` | ffmpeg extraction + librosa DSP | `duration_total`, `active_speech_time`, `phonation_ratio` |
-| `transcription.py` | OpenAI Whisper (base model) | Transcript string |
+| `transcription.py` | Groq cloud (whisper-large-v3) with local faster-whisper fallback | Clean transcript string (Catalan) |
 | `text.py` | spaCy + SentenceTransformer (7 metrics) | `question_alignment`, `discourse_coherence`, `information_density`, `specificity_index`, `lexical_richness`, `confidence_index`, `communication_rhythm_wpm` |
 | `video.py` | MediaPipe FaceMesh + DeepFace | `emotion_distribution`, `dominant_emotion`, `emotional_stability` |
 | `pipeline.py` | Orchestrator — wires all modules | Unified JSON response |
+
+#### Transcription Strategy
+
+```
+transcribe(audio_path)
+  ├─ Try: Groq API (whisper-large-v3, language="ca", temperature=0)
+  │       Fast (~2-5s), high quality, requires GROQ_API_KEY
+  │
+  └─ Fallback: faster-whisper local (medium, CPU/int8, 4 threads)
+               Slower (~30-60s on i5), no API key needed
+               Model pre-downloaded in Docker image
+```
 
 ---
 
@@ -148,10 +209,11 @@ Pregunta (1) ──→ (N) Entrevista
 | ASGI Server | Uvicorn 0.34.0 (uvloop) |
 | Database | PostgreSQL + SQLAlchemy 2.0 |
 | Auth | JWT (PyJWT) + bcrypt (passlib) |
-| Transcription | OpenAI Whisper |
+| Transcription | Groq cloud API (whisper-large-v3) + faster-whisper (local fallback) |
 | Audio DSP | librosa + ffmpeg |
 | NLP | spaCy 3.8 (`ca_core_news_md`) + SentenceTransformers |
 | Vision | MediaPipe FaceMesh + DeepFace |
+| Email | Resend |
 | Validation | Pydantic 2.10 |
 | Containerisation | Docker (two-layer: ML base + app) |
 | CI/CD | GitHub Actions → Docker Swarm |
@@ -164,7 +226,7 @@ Pregunta (1) ──→ (N) Entrevista
 - **Docker** (recommended) — Docker Desktop or Docker Engine
 - **Or** Python 3.12+ with pip
 - A running **PostgreSQL** instance
-- A `.env` file with `DATABASE_URL` (see [Configuration](#configuration))
+- A `.env` file (see [Configuration](#configuration))
 
 ---
 
@@ -183,7 +245,7 @@ cd Back
 
 ```bash
 cp .env.example .env
-# Edit .env with your PostgreSQL connection string
+# Edit .env with your values
 ```
 
 3. **Use the interactive launcher:**
@@ -210,7 +272,7 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-> Note: ML models (Whisper, spaCy, DeepFace) will be downloaded on first request.
+> Note: ML models (faster-whisper, spaCy, DeepFace) will be downloaded on first request if not cached.
 
 ---
 
@@ -249,7 +311,6 @@ All commands can be run via `./start.ps1` (or `./start.sh`) or directly:
 Back/
 ├── main.py                        # FastAPI app, all route definitions
 ├── request.py                     # Test script for /analyze endpoint
-├── database.py                    # SQLAlchemy engine, Base, get_db()
 ├── db/
 │   ├── database.py                # SQLAlchemy engine, session, get_db()
 │   ├── models.py                  # ORM models (Usuari, Categoria, Pregunta, Entrevista)
@@ -258,7 +319,7 @@ Back/
 │   ├── __init__.py                # Exports analyze_interview()
 │   ├── pipeline.py                # Orchestrator — wires all modules
 │   ├── audio.py                   # ffmpeg extraction + librosa DSP metrics
-│   ├── transcription.py           # Whisper transcription
+│   ├── transcription.py           # Groq cloud + faster-whisper local fallback
 │   ├── text.py                    # spaCy + SentenceTransformer NLP (7 metrics)
 │   └── video.py                   # MediaPipe FaceMesh + DeepFace emotions
 ├── infra/                         # Docker & orchestration
@@ -268,8 +329,8 @@ Back/
 │   ├── docker-compose-dev.yml     # Development with hot reload
 │   └── docker-compose.debug.yml   # Debug mode with debugpy (port 5678)
 ├── requirements.txt               # Meta-file (includes all below)
-├── requirements-api.txt           # API framework, auth, DB dependencies
-├── requirements-audio-nlp.txt     # Audio processing, Whisper, spaCy, NLP
+├── requirements-api.txt           # API framework, auth, DB, email
+├── requirements-audio-nlp.txt     # Groq, faster-whisper, spaCy, NLP
 ├── requirements-vision.txt        # OpenCV, MediaPipe, DeepFace
 ├── requirements-dev.txt           # Dev tools (pytest, debugpy)
 ├── start.ps1                      # Interactive PowerShell launcher
@@ -287,20 +348,32 @@ Back/
 │  App Image (runtime or dev)            │  ← requirements-api.txt (fast rebuild)
 ├────────────────────────────────────────┤
 │  ML Base Image (ghcr.io/.../ml-base)   │  ← audio-nlp + vision deps (rarely rebuilt)
+│  Pre-downloaded models:                │     faster-whisper medium, spaCy ca_core_news_md
 ├────────────────────────────────────────┤
-│  python:3.12-slim                      │
+│  python:3.12-slim + ffmpeg             │
 └────────────────────────────────────────┘
 ```
 
-Adding API dependencies (FastAPI, auth libs, etc.) only rebuilds the top layer. ML dependencies (Whisper, spaCy, DeepFace) are baked into the base image and only rebuilt when `requirements-audio-nlp.txt` or `requirements-vision.txt` change.
+Adding API dependencies (FastAPI, auth libs, etc.) only rebuilds the top layer. ML dependencies (faster-whisper, spaCy, DeepFace) are baked into the base image and only rebuilt when `requirements-audio-nlp.txt` or `requirements-vision.txt` change.
+
+### Dependency Groups
+
+| File | Contents |
+|------|----------|
+| `requirements-api.txt` | FastAPI, Uvicorn, SQLAlchemy, psycopg2, PyJWT, passlib, bcrypt, Pydantic, Resend, python-dotenv |
+| `requirements-audio-nlp.txt` | Groq SDK, faster-whisper, librosa, numpy, spaCy, SentenceTransformers, scikit-learn, tf-keras |
+| `requirements-vision.txt` | OpenCV (headless), MediaPipe, DeepFace |
+| `requirements-dev.txt` | pytest, debugpy |
 
 ---
 
 ## Configuration
 
-| Variable | Where | Purpose |
-|----------|-------|---------|
-| `DATABASE_URL` | `.env` | PostgreSQL connection string |
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string (`postgresql://user:pass@host:5432/db`) |
+| `JWT_SECRET_KEY` | ✅ | Secret key for JWT token signing (falls back to insecure default in dev) |
+| `GROQ_API_KEY` | ⬡ Optional | Groq API key for cloud transcription. If absent, uses local faster-whisper |
 
 The `.env` file is read by Docker Compose and `python-dotenv`. Copy `.env.example` and fill in your values.
 
