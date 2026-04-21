@@ -21,6 +21,10 @@ import os
 import asyncio
 import tempfile
 import logging
+import shutil
+import uuid
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -50,6 +54,11 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],  # Allow all headers
 )
+
+# Serve uploaded profile pictures as static files
+UPLOAD_DIR = Path("uploads/profile_pictures")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 def verify_password(plain_password, hashed_password):
     """Comprova si la contrasenya en text pla coincideix amb el hash de la BD."""
@@ -174,6 +183,52 @@ def get_current_user_profile(usuari_actual: Usuari = Depends(get_current_user)):
     return usuari_actual
 
 
+@app.post("/usuarios/me/foto", response_model=UsuariResponse, tags=["Usuaris"])
+async def upload_profile_picture(
+    foto: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """Puja una foto de perfil per a l'usuari autenticat."""
+    # Validate file type
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if foto.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Tipus de fitxer no permès. Utilitza JPEG, PNG, WebP o GIF."
+        )
+
+    # Validate file size (max 5MB)
+    contents = await foto.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="La imatge és massa gran. Màxim 5 MB."
+        )
+
+    # Generate unique filename
+    ext = Path(foto.filename or "photo.jpg").suffix or ".jpg"
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = UPLOAD_DIR / filename
+
+    # Delete old photo if exists
+    if usuari_actual.url_foto:
+        old_path = Path(usuari_actual.url_foto.lstrip("/"))
+        if old_path.exists():
+            old_path.unlink(missing_ok=True)
+
+    # Save file
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    # Update user record
+    usuari_actual.url_foto = f"/uploads/profile_pictures/{filename}"
+    db.commit()
+    db.refresh(usuari_actual)
+
+    return usuari_actual
+
+
 # Per crear usuaris internament
 @app.post("/usuarios", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Usuaris"])
 def create_user(
@@ -279,6 +334,8 @@ def update_user_partial(
         user.email = user_in.email
     if user_in.password is not None:
         user.password = get_password_hash(user_in.password)
+    if user_in.url_foto is not None:
+        user.url_foto = user_in.url_foto
         
     db.commit()
     db.refresh(user)

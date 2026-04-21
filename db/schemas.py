@@ -28,6 +28,7 @@ class UsuariCreate(UsuariBase):
 class UsuariResponse(UsuariBase):
     id: int
     data_creacio: datetime
+    url_foto: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -39,6 +40,7 @@ class UsuariUpdate(BaseModel):
     nom: Optional[str] = Field(None, min_length=2, max_length=100)
     email: Optional[EmailStr] = None
     password: Optional[str] = Field(None, min_length=8, max_length=50)
+    url_foto: Optional[str] = None
 
     @field_validator('password')
     @classmethod

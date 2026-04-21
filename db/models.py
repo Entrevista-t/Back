@@ -14,6 +14,7 @@ class Usuari(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
     data_creacio = Column(DateTime, server_default=func.now())
+    url_foto = Column(String(500), nullable=True)
 
     entrevistes = relationship("Entrevista", back_populates="usuari")
 
