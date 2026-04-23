@@ -61,9 +61,11 @@ def analyze_interview(video_path: str, question: str, language: str = "ca") -> d
             },
             "text_metrics": dict(text_metrics),  # copy before pop
         }
-        llm_feedback = generate_feedback(
+        llm_result = generate_feedback(
             transcript, question, all_metrics, language=language
         )
+        llm_feedback = llm_result["feedback"]
+        answer_quality_score = llm_result["answer_quality_score"]
 
         return {
             "transcript": transcript,
@@ -76,6 +78,7 @@ def analyze_interview(video_path: str, question: str, language: str = "ca") -> d
             "text_metrics": text_metrics,
             "video_metrics": video_metrics,
             "llm_feedback": llm_feedback,
+            "answer_quality_score": answer_quality_score,
         }
 
     except Exception as e:

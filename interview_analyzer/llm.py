@@ -3,7 +3,7 @@ LLM feedback generator.
 
 Produces a natural-language summary of interview performance by sending
 the transcript, question, and computed metrics to a large language model.
-Currently returns a placeholder string while the integration is being
+Currently returns placeholder values while the integration is being
 developed.
 """
 
@@ -25,6 +25,10 @@ _FALLBACK_FEEDBACK = (
     "Si us plau, torna-ho a intentar més tard."
 )
 
+# Placeholder answer quality score (0.0–1.0) representing how well the
+# answer addresses the interview question.
+_PLACEHOLDER_ANSWER_QUALITY = 0.72
+
 
 # TODO: Replace placeholder with actual LLM API call (e.g., OpenAI, Groq, Anthropic)
 def generate_feedback(
@@ -32,8 +36,8 @@ def generate_feedback(
     question: str,
     metrics: dict,
     language: str = "ca",
-) -> str:
-    """Generate natural-language feedback for an interview answer.
+) -> dict:
+    """Generate natural-language feedback and answer quality score.
 
     Args:
         transcript: The transcribed text of the candidate's answer.
@@ -44,8 +48,11 @@ def generate_feedback(
             for Catalan).
 
     Returns:
-        A feedback string summarising the candidate's performance.
-        Currently returns a placeholder; will be replaced by an LLM call.
+        A dict with two keys:
+        - ``"feedback"`` (str): Natural-language summary of performance.
+        - ``"answer_quality_score"`` (float): 0.0–1.0 score measuring how
+          well the answer addresses the question.
+        Currently returns placeholder values; will be replaced by an LLM call.
     """
     try:
         logger.info(
@@ -54,12 +61,21 @@ def generate_feedback(
             len(transcript) if transcript else 0,
         )
 
-        # TODO: Replace placeholder with actual LLM API call (e.g., OpenAI, Groq, Anthropic)
+        # TODO: Replace placeholders with actual LLM API call
+        # The LLM should evaluate the transcript against the question and
+        # return both a textual feedback string and a 0–1 quality score.
         feedback = _PLACEHOLDER_FEEDBACK
+        answer_quality_score = _PLACEHOLDER_ANSWER_QUALITY
 
-        logger.info("generate_feedback returning placeholder feedback")
-        return feedback
+        logger.info("generate_feedback returning placeholder values")
+        return {
+            "feedback": feedback,
+            "answer_quality_score": answer_quality_score,
+        }
 
     except Exception as e:
         logger.error("Failed to generate LLM feedback: %s", e)
-        return _FALLBACK_FEEDBACK
+        return {
+            "feedback": _FALLBACK_FEEDBACK,
+            "answer_quality_score": 0.0,
+        }
