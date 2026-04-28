@@ -11,3 +11,4 @@ bcrypt==3.2.2
 PyJWT==2.10.1
 email-validator==2.2.0
 resend
+google-generativeai==0.8.3
