@@ -20,7 +20,7 @@ def enviar_informe_per_correu(email_desti: str, nom_usuari: str, ruta_pdf: str):
             pdf_content = list(f.read())
 
         params = {
-            "from": "Entrevista-T <onboarding@resend.dev>", # El remitent per defecte de Resend (capa gratuïta)
+            "from": "Entrevista-T <no-reply@entrevistat.kire.ovh>", # El remitent per defecte de Resend (capa gratuïta)
             "to": [email_desti],
             "subject": f"El teu informe d'Entrevista't, {nom_usuari}!",
             "html": f"<strong>Hola {nom_usuari}!</strong><br><p>T'adjuntem l'informe de la teva darrera entrevista de pràctica.</p>",
