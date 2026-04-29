@@ -37,3 +37,33 @@ def enviar_informe_per_correu(email_desti: str, nom_usuari: str, ruta_pdf: str):
         
     except Exception as e:
         logger.error(f"Error enviant correu: {e}")
+
+def enviar_correu_benvinguda(email_desti: str, nom_usuari: str):
+    """
+    Envia un correu de benvinguda quan un usuari es registra.
+    """
+    resend.api_key = os.getenv("RESEND_API_KEY")
+    
+    try:
+        params = {
+            "from": "Entrevista-t <no-reply@entrevistat.kire.ovh>",
+            "to": [email_desti],
+            "subject": f"Benvingut/da a Entrevista't, {nom_usuari}!",
+            "html": f"""
+                <div style="font-family: sans-serif; color: #333;">
+                    <h1 style="color: #7E57C2;">Benvingut/da a Entrevista't!</h1>
+                    <p>Hola <strong>{nom_usuari}</strong>,</p>
+                    <p>Moltes gràcies per apuntar-te a la nostra plataforma. Estem molt contents de tenir-te amb nosaltres!</p>
+                    <p>A partir d'ara, podràs practicar les teves entrevistes de feina, rebre mètriques en temps real i millorar la teva comunicació gràcies a la nostra IA.</p>
+                    <p style="margin-top: 20px;"><strong>Endavant amb les entrevistes!</strong></p>
+                    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+                    <p style="font-size: 0.8em; color: #999;">L'equip d'Entrevista't</p>
+                </div>
+            """
+        }
+
+        resend.Emails.send(params)
+        logger.info(f"Correu de benvinguda enviat a {email_desti}")
+        
+    except Exception as e:
+        logger.error(f"Error enviant correu de benvinguda: {e}")

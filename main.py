@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi import BackgroundTasks
 from fastapi.responses import FileResponse
 from pdf_generator import generar_pdf_entrevista
-from email_service import enviar_informe_per_correu
+from email_service import enviar_correu_benvinguda, enviar_informe_per_correu
 
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -123,7 +123,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 # ==========================================
 
 @app.post("/auth/register", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Autenticació"])
-def register(user: UsuariCreate, db: Session = Depends(get_db)):
+def register(user: UsuariCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Crea un compte nou (Registre)."""
     
     existing_user = db.query(Usuari).filter(Usuari.email == user.email).first()
@@ -146,6 +146,15 @@ def register(user: UsuariCreate, db: Session = Depends(get_db)):
     
     db.refresh(nou_usuari)
 
+    try:
+        background_tasks.add_task(
+            enviar_correu_benvinguda, 
+            email_desti=nou_usuari.email, 
+            nom_usuari=nou_usuari.nom
+        )
+    except Exception as e:
+        # Si falla, no trenquem l'API, només ho guardem al log
+        logger.error(f"❌ Error al programar el correu de benvinguda: {e}")
     return nou_usuari
 
 @app.post("/auth/login", tags=["Autenticació"])
