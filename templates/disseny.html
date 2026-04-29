@@ -21,7 +21,7 @@
             margin: 0 auto; 
         }
 
-        /* Capçalera */
+        /* Capçalera i Títols Principals */
         .header { 
             border-bottom: 2px solid #B39DDB; 
             padding-bottom: 10px; 
@@ -81,6 +81,7 @@
             text-transform: uppercase;
             font-size: 10pt;
             letter-spacing: 1px;
+            font-weight: bold;
         }
         .metric-value {
             font-weight: bold;
@@ -90,13 +91,13 @@
         .bar-bg {
             width: 100%;
             height: 8px;
-            background-color: #F3E5F5; /* Fons lila claret */
+            background-color: #F3E5F5;
             border-radius: 4px;
             overflow: hidden;
         }
         .bar-fill {
             height: 100%;
-            background-color: #B39DDB; /* Color lila actiu */
+            background-color: #B39DDB;
             border-radius: 4px;
         }
 
@@ -118,11 +119,31 @@
             font-size: 12pt;
             text-align: justify;
         }
+
+        /* ==========================================
+           ESTILS DE L'ANNEX
+           ========================================== */
+        .annex-container {
+            /* Aquestes dues línies forcen el salt de pàgina sí o sí */
+            page-break-before: always; 
+            break-before: page; 
+            
+            /* Una mica de marge a dalt per quan comenci la pàgina nova */
+            padding-top: 20px; 
+        }
+        .annex-item {
+            margin-bottom: 25px; 
+        }
+        .annex-desc {
+            font-size: 12pt;
+            margin-top: 5px;
+            text-align: justify;
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>informe entrevista: Alba Suri</h1>
+        <h1>Informe d'entrevista: Alba Suri</h1>
         <p><strong>Data:</strong> 25 d'Abril, 2026</p>
         <p><strong>Pregunta:</strong> Quines diferències hi ha entre una arquitectura monolítica i una de microserveis?</p>
     </div>
@@ -166,6 +187,45 @@
 
     <div class="feedback-text">
         Has demostrat un gran domini tècnic. La teva explicació sobre el desacoblament de serveis ha estat brillant, tot i que podries millorar el contacte visual durant la meitat de la resposta.
+    </div>
+
+    <div class="annex-container">
+        <div class="header">
+            <h1>Annex: glossari de mètriques</h1>
+        </div>
+        
+        <p style="font-size: 12pt; margin-bottom: 30px; color: #333;">
+            A continuació es detalla què mesura cadascun dels indicadors presents en aquest informe i com influeixen en la teva puntuació global.
+        </p>
+
+        <div class="annex-item">
+            <div class="metric-title">Puntuació Global</div>
+            <div class="annex-desc">
+                És la valoració general de la teva intervenció (de 0 a 100). Es calcula ponderant la precisió tècnica de la teva resposta, la qualitat de la teva expressió oral (confiança i ritme) i la teva comunicació no verbal.
+            </div>
+        </div>
+
+        <div class="annex-item">
+            <div class="metric-title">Índex de Confiança</div>
+            <div class="annex-desc">
+                Analitza la fermesa de la teva veu i l'absència de dubtes o silencis incòmodes. Penalitza l'ús excessiu de crosses lingüístiques ("ehh", "mmm") per mesurar la seguretat amb la qual transmets el teu missatge. Un percentatge més alt indica més claredat i decisió.
+            </div>
+        </div>
+
+        <div class="annex-item">
+            <div class="metric-title">Ritme de la parla (WPM)</div>
+            <div class="annex-desc">
+                Mesura la velocitat de la teva comunicació en paraules per minut (Words Per Minute). Un ritme ideal en una entrevista tècnica se situa entre 130 i 160 WPM, un rang que demostra fluïdesa sense resultar precipitat o difícil d'entendre.
+            </div>
+        </div>
+
+        <div class="annex-item">
+            <div class="metric-title">Emoció dominant (Facial)</div>
+            <div class="annex-desc">
+                Mitjançant visió per computador, s'analitzen els teus microgestos facials durant tota l'entrevista per determinar quina emoció has transmès predominantment. Aspectes com mantenir el contacte visual i un rostre relaxat hi sumen positivament.
+            </div>
+        </div>
+
     </div>
 </body>
 </html>
