@@ -12,6 +12,7 @@ from .audio import extract_audio_from_video, analyze_audio_signal
 from .transcription import transcribe
 from .text import analyze_text
 from .video import analyze_video
+from .llm import generate_feedback
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,24 @@ def analyze_interview(video_path: str, question: str, language: str = "ca") -> d
         logger.info("Analyzing video emotions...")
         video_metrics = analyze_video(video_path)
 
+        # 6. Generate LLM feedback
+        logger.info("Generating LLM feedback...")
+        all_metrics = {
+            "audio_metrics": {
+                "duration_total": audio_signal["duration_total"],
+                "active_speech_time": audio_signal["active_speech_time"],
+            },
+            "text_metrics": dict(text_metrics),  # copy before pop
+        }
+        llm_result = generate_feedback(
+            transcript, question, all_metrics, language=language
+        )
+        llm_feedback = llm_result["feedback"]
+        answer_quality_score = llm_result["answer_quality_score"]
+
+        #llm_feedback = "Feedback de prova: el candidat ha respost de manera clara però podria millorar el ritme de la comunicació."
+        #answer_quality_score = 0.72
+
         return {
             "transcript": transcript,
             "audio_metrics": {
@@ -61,10 +80,12 @@ def analyze_interview(video_path: str, question: str, language: str = "ca") -> d
             },
             "text_metrics": text_metrics,
             "video_metrics": video_metrics,
+            "llm_feedback": llm_feedback,
+            "answer_quality_score": answer_quality_score,
         }
 
     except Exception as e:
-        logger.error("Interview analysis failed: %s", e)
+        logger.error("Interview analysis failed: %s", e, exc_info=True)
         raise
 
     finally:

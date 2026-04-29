@@ -26,6 +26,11 @@ import uuid
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 
+from fastapi import BackgroundTasks
+from fastapi.responses import FileResponse
+from pdf_generator import generar_pdf_entrevista
+from email_service import enviar_correu_benvinguda, enviar_informe_per_correu
+
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -118,7 +123,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 # ==========================================
 
 @app.post("/auth/register", response_model=UsuariResponse, status_code=status.HTTP_201_CREATED, tags=["Autenticació"])
-def register(user: UsuariCreate, db: Session = Depends(get_db)):
+def register(user: UsuariCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Crea un compte nou (Registre)."""
     
     existing_user = db.query(Usuari).filter(Usuari.email == user.email).first()
@@ -141,6 +146,15 @@ def register(user: UsuariCreate, db: Session = Depends(get_db)):
     
     db.refresh(nou_usuari)
 
+    try:
+        background_tasks.add_task(
+            enviar_correu_benvinguda, 
+            email_desti=nou_usuari.email, 
+            nom_usuari=nou_usuari.nom
+        )
+    except Exception as e:
+        # Si falla, no trenquem l'API, només ho guardem al log
+        logger.error(f"❌ Error al programar el correu de benvinguda: {e}")
     return nou_usuari
 
 @app.post("/auth/login", tags=["Autenticació"])
@@ -675,31 +689,30 @@ def list_user_interviews(
 
 @app.post("/analyze", tags=["Anàlisi"])
 async def analyze(
+    background_tasks: BackgroundTasks, # 👈 NOU: Necessari per enviar el correu en segon pla
     video: UploadFile = File(..., description="Video file of the interview answer"),
     question: str = Form(..., description="The interviewer's question text"),
     language: str = Form("ca", description="Language hint for transcription"),
-    id_entrevista: int = Form(..., description="L'ID de l'entrevista pendent"), # NOU: Demanem l'ID
-    db: Session = Depends(get_db), # NOU: Ens connectem a la BD
+    id_entrevista: int = Form(..., description="L'ID de l'entrevista pendent"),
+    db: Session = Depends(get_db),
     usuari_actual: Usuari = Depends(get_current_user),
 ):
     """
-    Analitza el vídeo del candidat, extreu-ne les mètriques i les guarda a la base de dades.
+    Analitza el vídeo del candidat, en guarda les mètriques i automàticament 
+    genera i envia l'informe PDF per correu electrònic.
     """
     
-    # 1. Busquem l'entrevista a la BD i comprovem que sigui del nostre usuari
     entrevista = db.query(Entrevista).filter(Entrevista.id == id_entrevista).first()
     if not entrevista:
         raise HTTPException(status_code=404, detail="Entrevista no trobada")
     if entrevista.id_usuari != usuari_actual.id:
         raise HTTPException(status_code=403, detail="No tens permís per modificar aquesta entrevista")
 
-    # 2. Avisem a la BD que comencem a processar (per si el front-end pregunta l'estat)
     entrevista.estat_proces = "processant"
     db.commit()
 
     tmp_path = None
     try:
-        # Guardem el vídeo temporalment
         suffix = os.path.splitext(video.filename or ".mp4")[1].lower()
         if suffix not in ALLOWED_VIDEO_EXTENSIONS:
             raise HTTPException(status_code=400, detail="Format de vídeo no suportat")
@@ -713,37 +726,217 @@ async def analyze(
                     raise HTTPException(status_code=413, detail="L'arxiu és massa gran")
                 tmp.write(chunk)
 
-        # 3. Executem TOTA la teva IA de cop en un fil separat (per no bloquejar l'API)
+        # 3. Executem TOTA la IA
         result = await asyncio.to_thread(analyze_interview, tmp_path, question, language)
 
-        # 4. EXCEŀLENT: Guardem els resultats a la BD i posem l'estat en completat
+        # 4. Guardem a la BD
         entrevista.metriques = result
         entrevista.estat_proces = "completat"
         db.commit()
 
+        # 🚀 5. INICI: GENERACIÓ I ENVIAMENT AUTOMÀTIC DEL PDF 🚀
+        try:
+            m = result
+            audio = m.get("audio_metrics", {})
+            text_m = m.get("text_metrics", {})
+            video_m = m.get("video_metrics", {})
+
+            # Helper: convert 0-1 float (or dict with known sub-key) to 0-100 int
+            def safe_pct(val, default=0):
+                if isinstance(val, (int, float)):
+                    v = float(val)
+                    return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
+                if isinstance(val, str):
+                    try:
+                        v = float(val)
+                        return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
+                    except ValueError:
+                        return default
+                if isinstance(val, dict):
+                    for key in ["score", "global_coherence", "value"]:
+                        if key in val:
+                            return safe_pct(val[key], default)
+                return default
+
+            # Emotion label from video
+            emocio_text = "Neutral"
+            if isinstance(video_m, dict):
+                emocio_text = str(video_m.get("dominant_emotion", "Neutral")).capitalize()
+            elif isinstance(video_m, list) and len(video_m) > 0:
+                from collections import Counter
+                emocions_text = [str(e) for e in video_m if isinstance(e, str)]
+                if emocions_text: emocio_text = Counter(emocions_text).most_common(1)[0][0].capitalize()
+            elif isinstance(video_m, str):
+                emocio_text = video_m.capitalize()
+
+            # Temps de parla
+            durada_f = float(audio.get("duration_total", 0) or 0)
+            actiu_f = float(audio.get("active_speech_time", 0) or 0)
+            temps_parla_percent = min(100, int((actiu_f / durada_f) * 100)) if durada_f > 0 else 0
+
+            # Fluïdesa (mirrors frontend formula: speech_ratio * 0.5 + wpm_norm * 0.5)
+            sr = min(1.0, actiu_f / durada_f) if durada_f > 0 else 0.0
+            wpm_raw = float(audio.get("communication_rhythm_wpm", 0) or 0)
+            wpm_norm = max(0.0, 1.0 - abs(wpm_raw - 145) / 145)
+            fluidesa_val = min(100, max(0, int((sr * 0.5 + wpm_norm * 0.5) * 100)))
+
+            # Estabilitat emocional (std dev inverted: low std = high stability)
+            estabilitat_raw = 0.0
+            if isinstance(video_m, dict):
+                estabilitat_raw = float(video_m.get("emotional_stability", 0) or 0)
+            emocional_val = max(0, min(100, int((1.0 - estabilitat_raw) * 100)))
+
+            # Answer quality score (0-1 float from LLM)
+            raw_score_val = float(m.get("answer_quality_score", 0) or 0)
+            qualitat_val = min(100, max(0, int(raw_score_val * 100 if raw_score_val <= 1.0 else raw_score_val)))
+
+            # Compute individual metrics for mapping
+            contingut_val = safe_pct(text_m.get("question_alignment", 0))
+            estructura_val = safe_pct(text_m.get("discourse_coherence", 0))
+            seguretat_val = safe_pct(audio.get("confidence_index", 0))
+            lexic_val = safe_pct(text_m.get("lexical_richness", 0))
+
+            # Puntuació global = median of all 7 metrics (mirrors frontend)
+            all_scores = sorted([s for s in [
+                contingut_val, fluidesa_val, estructura_val, seguretat_val,
+                lexic_val, qualitat_val, emocional_val
+            ] if s > 0])
+            if all_scores:
+                mid = len(all_scores) // 2
+                score_final = all_scores[mid] if len(all_scores) % 2 == 1 else (all_scores[mid - 1] + all_scores[mid]) // 2
+            else:
+                score_final = 0
+
+            # Mapeig amb claus correctes del pipeline
+            dades_informe = {
+                "nom_usuari": usuari_actual.nom,
+                "data": datetime.now().strftime("%d/%m/%Y"),
+                "pregunta": question,
+                "transcripcio": m.get("transcript", "Sense transcripció."),
+                "score": score_final,
+                "feedback_ia": m.get("llm_feedback", "Sense feedback."),
+                "qualitat": qualitat_val,
+                "contingut": contingut_val,
+                "fluidesa": fluidesa_val,
+                "estructura": estructura_val,
+                "seguretat": seguretat_val,
+                "lexic": lexic_val,
+                "emocional": emocional_val,
+                "alineacio_pregunta": safe_pct(text_m.get("question_alignment", 0)),
+                "coherencia_discurs": safe_pct(text_m.get("discourse_coherence", 0)),
+                "densitat_informativa": safe_pct(text_m.get("information_density", 0)),
+                "especificitat": safe_pct(text_m.get("specificity_index", 0)),
+                "wpm": int(wpm_raw),
+                "temps_parla": temps_parla_percent,
+                "emocio_predominant": emocio_text
+            }
+
+            ruta_pdf = generar_pdf_entrevista(dades_informe)
+            background_tasks.add_task(enviar_informe_per_correu, email_desti=usuari_actual.email, nom_usuari=usuari_actual.nom, ruta_pdf=ruta_pdf)
+            logger.info("PDF generat i programat per enviament automàtic.")
+        except Exception as e:
+            logger.error(f"Error generant PDF automàtic: {e}")
+            # No aturem el procés, l'anàlisi ja està guardat amb èxit.
+        # 🚀 FI: CODI AUTOMÀTIC 🚀
+
         return JSONResponse(content={
-            "message": "Anàlisi completat correctament",
+            "message": "Anàlisi completat correctament i informe enviat per correu.",
             "id_entrevista": entrevista.id,
-            "estat": entrevista.estat_proces
+            "estat": entrevista.estat_proces,
+            "metriques": result
         })
 
     except HTTPException:
-        # Si hi ha hagut un error controlat (ex: arxiu massa gran), no toquem la BD
         raise
     except Exception as e:
-        # Si la IA peta, posem l'estat a error perquè l'usuari no es quedi esperant eternament
         logger.error("Analysis endpoint error: %s", e)
         entrevista.estat_proces = "error"
         db.commit()
         raise HTTPException(status_code=500, detail="L'anàlisi del vídeo ha fallat.")
 
     finally:
-        # 5. Esborrem el vídeo pesat per no omplir el disc dur del servidor
         if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
+            try: os.remove(tmp_path)
+            except OSError: pass
+
+# ==========================================
+# GENERADOR PDF I PROVES
+# ==========================================
+
+@app.get("/test-pdf", tags=["Proves"])
+async def test_pdf():
+    # 1. Preparem les dades mock directament a l'API
+    dades_mock = {
+        "nom_usuari": "Alba Suri",
+        "data": "29 d'Abril, 2026",
+        "pregunta": "Com dissenyaries un sistema de memòria cau (caching) eficaç?",
+        "score": 66,
+        "feedback_ia": "L'estructura de la teva resposta ha estat impecable i has mantingut molt bé les emocions, però t'has desviat lleugerament de la pregunta i el contingut podria ser més ric i específic.",
+        "contingut": 31,
+        "fluidesa": 78,
+        "estructura": 100,
+        "seguretat": 80,
+        "lexic": 89,
+        "emocional": 90,
+        "wpm": 161,
+        "temps_parla": 66,
+        "emocio_predominant": "Positiva"
+    } 
+    
+    ruta_pdf = generar_pdf_entrevista(dades_mock)
+    
+    return FileResponse(
+        ruta_pdf, 
+        filename="informe_mock.pdf", 
+        media_type='application/pdf'
+    )
+
+
+# ==========================================
+# ENVIAMENT DE CORREUS
+# ==========================================
+
+
+@app.post("/test-full-report", tags=["Proves"])
+async def test_full_report(background_tasks: BackgroundTasks, usuari_actual: Usuari = Depends(get_current_user)):
+    """
+    1. Genera un PDF Mock amb les noves mètriques.
+    2. L'envia al correu de l'usuari (en segon pla).
+    3. Retorna el PDF al front-end per previsualitzar-lo.
+    """
+    
+    # 1. Dades mock per a l'informe adaptades al nou disseny
+    dades_mock = {
+        "nom_usuari": usuari_actual.nom, # Agafem el nom real
+        "data": "29 d'Abril, 2026",
+        "pregunta": "Com dissenyaries un sistema de memòria cau (caching) eficaç?",
+        "score": 66,
+        "feedback_ia": "L'estructura de la teva resposta ha estat impecable i has mantingut molt bé les emocions, però t'has desviat lleugerament de la pregunta i el contingut podria ser més ric i específic.",
+        "contingut": 31,
+        "fluidesa": 78,
+        "estructura": 100,
+        "seguretat": 80,
+        "lexic": 89,
+        "emocional": 90,
+        "wpm": 161,
+        "temps_parla": 66,
+        "emocio_predominant": "Positiva"
+    }
+
+    ruta_pdf = generar_pdf_entrevista(dades_mock)
+
+    background_tasks.add_task(
+        enviar_informe_per_correu, 
+        email_desti=usuari_actual.email, 
+        nom_usuari=usuari_actual.nom, 
+        ruta_pdf=ruta_pdf
+    )
+
+    return FileResponse(
+        path=ruta_pdf, 
+        filename=f"informe_{usuari_actual.nom}.pdf", 
+        media_type='application/pdf'
+    )
 
 # ==========================================
 # ENDPOINTS DE PROVA

@@ -1,3 +1,4 @@
 opencv-python-headless==4.10.0.84
 mediapipe==0.10.20
 deepface==0.0.93
+protobuf>=4.25.0,<5.0

@@ -6,5 +6,6 @@ adapted for job interview evaluation.
 """
 
 from .pipeline import analyze_interview
+from .llm import generate_feedback
 
-__all__ = ["analyze_interview"]
+__all__ = ["analyze_interview", "generate_feedback"]
