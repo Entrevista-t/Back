@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+            @bottom-right { 
+                content: "Pàgina " counter(page) " de " counter(pages); 
+                font-size: 9pt; 
+                color: #B39DDB; 
+            }
+        }
+        
+        body { 
+            font-family: 'Times New Roman', Times, serif; 
+            color: #000000; 
+            line-height: 1.5; 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
+
+        /* Capçalera */
+        .header { 
+            border-bottom: 2px solid #B39DDB; 
+            padding-bottom: 10px; 
+            margin-bottom: 20px; 
+        }
+        h1 { font-size: 24pt; margin-bottom: 10px; text-transform: lowercase; }
+        .header p { margin: 5px 0; font-size: 12pt; }
+
+        /* Puntuació Global */
+        .score-container {
+            text-align: center;
+            margin: 40px 0;
+        }
+        .score-ring { 
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: conic-gradient(#B39DDB 85%, #F3E5F5 0);
+        }
+        .score-inner-circle {
+            width: 110px; 
+            height: 110px;
+            border-radius: 50%;
+            background-color: white; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .score-num { 
+            font-size: 38pt; 
+            font-weight: bold; 
+            color: #B39DDB; 
+        }
+
+        /* GRÀFICS DE MÈTRIQUES VISUALS */
+        .visual-metrics {
+            margin: 30px 0;
+            padding: 20px 0;
+            border-top: 1px solid #E1BEE7;
+            border-bottom: 1px solid #E1BEE7;
+        }
+        .metric-row {
+            margin-bottom: 15px;
+        }
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 11pt;
+        }
+        .metric-title {
+            color: #7E57C2;
+            text-transform: uppercase;
+            font-size: 10pt;
+            letter-spacing: 1px;
+        }
+        .metric-value {
+            font-weight: bold;
+        }
+        
+        /* Barres de progrés */
+        .bar-bg {
+            width: 100%;
+            height: 8px;
+            background-color: #F3E5F5; /* Fons lila claret */
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            background-color: #B39DDB; /* Color lila actiu */
+            border-radius: 4px;
+        }
+
+        /* Etiqueta d'emoció */
+        .emotion-badge {
+            display: inline-block;
+            background-color: #F3E5F5;
+            color: #7E57C2;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 11pt;
+            font-weight: bold;
+            border: 1px solid #B39DDB;
+        }
+
+        /* Feedback */
+        .feedback-text { 
+            padding: 10px 0;
+            font-size: 12pt;
+            text-align: justify;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>informe entrevista: Alba Suri</h1>
+        <p><strong>Data:</strong> 25 d'Abril, 2026</p>
+        <p><strong>Pregunta:</strong> Quines diferències hi ha entre una arquitectura monolítica i una de microserveis?</p>
+    </div>
+
+    <div class="score-container">
+        <div class="score-ring" style="background: conic-gradient(#B39DDB 85%, #F3E5F5 0);">
+            <div class="score-inner-circle">
+                <div class="score-num">85</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="visual-metrics">
+        
+        <div class="metric-row">
+            <div class="metric-header">
+                <span class="metric-title">Índex de Confiança</span>
+                <span class="metric-value">92%</span>
+            </div>
+            <div class="bar-bg">
+                <div class="bar-fill" style="width: 92%;"></div>
+            </div>
+        </div>
+
+        <div class="metric-row">
+            <div class="metric-header">
+                <span class="metric-title">Ritme de la parla</span>
+                <span class="metric-value">130 wpm</span>
+            </div>
+            <div class="bar-bg">
+                <div class="bar-fill" style="width: 81%;"></div>
+            </div>
+        </div>
+
+        <div class="metric-row" style="margin-top: 25px; display: flex; align-items: center; justify-content: space-between;">
+            <span class="metric-title">Emoció dominant (Facial)</span>
+            <span class="emotion-badge">Positiva / Empatia</span>
+        </div>
+
+    </div>
+
+    <div class="feedback-text">
+        Has demostrat un gran domini tècnic. La teva explicació sobre el desacoblament de serveis ha estat brillant, tot i que podries millorar el contacte visual durant la meitat de la resposta.
+    </div>
+</body>
+</html>
