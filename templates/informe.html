@@ -29,6 +29,8 @@
             max-width: 780px;
             margin: 0 auto;
             font-size: 10pt;
+            orphans: 3;
+            widows: 3;
         }
 
         /* ── Header ─────────────────────────────────────────────────── */
@@ -39,6 +41,8 @@
             padding-bottom: 16px;
             margin-bottom: 28px;
             border-bottom: 1px solid #E4E5F1;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .header-left h1 {
             font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
@@ -71,6 +75,8 @@
             padding: 24px 0;
             background: linear-gradient(180deg, rgba(99,102,241,0.03) 0%, transparent 100%);
             border-radius: 16px;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .score-ring {
             display: inline-block;
@@ -118,6 +124,8 @@
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 16px;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .section-header {
             font-size: 11pt;
@@ -127,6 +135,8 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            page-break-after: avoid;
+            break-after: avoid;
         }
         .section-header .icon {
             display: inline-flex;
@@ -143,6 +153,8 @@
             margin-bottom: 16px;
             border-radius: 12px;
             overflow: hidden;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .feedback-gradient-bar {
             height: 3px;
@@ -220,6 +232,8 @@
             display: flex;
             align-items: flex-start;
             gap: 8px;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .question-box .q-icon {
             display: inline-block;
@@ -250,6 +264,8 @@
             display: flex;
             gap: 10px;
             margin-bottom: 16px;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .detail-card {
             flex: 1;
@@ -299,12 +315,16 @@
             font-weight: 600;
             color: #484B6A;
             margin-bottom: 6px;
+            page-break-after: avoid;
+            break-after: avoid;
         }
         .annex-subtitle {
             font-size: 9pt;
             color: #9394A5;
             margin-bottom: 24px;
             line-height: 1.6;
+            page-break-after: avoid;
+            break-after: avoid;
         }
         .annex-item {
             margin-bottom: 16px;
@@ -313,6 +333,8 @@
             border-left: 4px solid #6366F1;
             border-radius: 0 8px 8px 0;
             padding: 14px 16px;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .annex-item-title {
             font-weight: 600;
@@ -358,6 +380,10 @@
         .badge-neutral { background: rgba(99,102,241,0.08); color: #6366F1; }
 
         /* ── Metrics Detail List ───────────────────────────────────── */
+        .card-breakable {
+            page-break-inside: auto;
+            break-inside: auto;
+        }
         .metrics-list {
             margin-bottom: 16px;
         }
@@ -366,6 +392,8 @@
             align-items: center;
             padding: 10px 0;
             border-bottom: 1px solid #E4E5F1;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .metric-item:last-child {
             border-bottom: none;
@@ -500,7 +528,7 @@
 
     <!-- ═══════════ TRANSCRIPT ═══════════ -->
     {% if transcripcio is defined and transcripcio %}
-    <div class="card">
+    <div class="card card-breakable">
         <div class="section-header">
             <span class="icon"></span>
             <span>Transcripció</span>
@@ -538,7 +566,7 @@
     </div>
 
     <!-- ═══════════ FULL METRICS LIST ═══════════ -->
-    <div class="card">
+    <div class="card card-breakable">
         <div class="section-header">
             <span class="icon"></span>
             <span>Detall de mètriques</span>
