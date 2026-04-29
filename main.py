@@ -763,6 +763,102 @@ async def analyze(
 # GENERADOR PDF
 # ==========================================
 
+@app.post("/entrevistas/{id}/enviar-informe", tags=["Entrevistes"])
+async def enviar_informe(
+    id: int,
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user)
+):
+    """
+    Recupera les mètriques reals, genera el PDF personalitzat i l'envia.
+    """
+    entrevista = db.query(Entrevista).filter(Entrevista.id == id).first()
+    if not entrevista:
+        raise HTTPException(status_code=404, detail="Entrevista no trobada")
+    if entrevista.id_usuari != usuari_actual.id:
+        raise HTTPException(status_code=403, detail="No tens permís")
+    if entrevista.estat_proces != "completat" or not entrevista.metriques:
+        raise HTTPException(status_code=400, detail="Mètriques no disponibles")
+
+    pregunta = db.query(Pregunta).filter(Pregunta.id == entrevista.id_pregunta).first()
+    text_pregunta = pregunta.text_pregunta if pregunta else "Simulació d'entrevista"
+
+    m = entrevista.metriques
+    audio = m.get("audio_metrics", {})
+    text_m = m.get("text_metrics", {})
+    video_m = m.get("video_metrics", [])
+
+    # ✅ FUNCIÓ ANTIBALES PER EXTREURE NÚMEROS (Evita el TypeError)
+    def safe_extract_int(val, default=0):
+        if isinstance(val, (int, float)):
+            return int(val)
+        if isinstance(val, str):
+            try: return int(float(val))
+            except ValueError: return default
+        if isinstance(val, dict):
+            for key in ["score", "value", "puntuacio", "index", "percentage"]:
+                if key in val and isinstance(val[key], (int, float, str)):
+                    try: return int(float(val[key]))
+                    except ValueError: pass
+            for v in val.values():
+                if isinstance(v, (int, float)):
+                    return int(v)
+        return default
+
+    # ✅ FILTRE PER L'EMOCIÓ
+    emocio_text = "Neutral"
+    if isinstance(video_m, dict):
+        emocio_text = str(video_m.get("dominant_emotion", video_m.get("emocio", "Neutral"))).capitalize()
+    elif isinstance(video_m, list) and len(video_m) > 0:
+        from collections import Counter
+        emocions_text = [str(e) for e in video_m if isinstance(e, str)]
+        if emocions_text:
+            emocio_text = Counter(emocions_text).most_common(1)[0][0].capitalize()
+    elif isinstance(video_m, str):
+        emocio_text = video_m.capitalize()
+
+    # Càlculs
+    durada = safe_extract_int(audio.get("duration_total", 1), default=1)
+    actiu = safe_extract_int(audio.get("active_speech_time", 0))
+    temps_parla_percent = min(100, int((actiu / durada) * 100)) if durada > 0 else 0
+    
+    raw_score = safe_extract_int(m.get("answer_quality_score", 0))
+    score_final = int(raw_score * 100) if raw_score <= 1 else raw_score
+
+    # ✅ MAPEIG FINAL AL TEU HTML
+    dades_informe = {
+        "nom_usuari": usuari_actual.nom,
+        "data": datetime.now().strftime("%d/%m/%Y"),
+        "pregunta": text_pregunta,
+        "transcripcio": m.get("transcript", "Sense transcripció."),
+        
+        "score": score_final,
+        "feedback_ia": m.get("llm_feedback", "Sense feedback."),
+        "qualitat": score_final,
+        
+        "contingut": safe_extract_int(text_m.get("alignment_score", 0)), 
+        "fluidesa": safe_extract_int(text_m.get("fluency_score", 70)), 
+        "estructura": safe_extract_int(text_m.get("coherence_score", 0)),
+        "seguretat": safe_extract_int(audio.get("confidence_index", 0)),
+        "lexic": safe_extract_int(text_m.get("lexical_diversity", 0)),
+        "emocional": safe_extract_int(text_m.get("emotional_stability", 85)), 
+        
+        "alineacio_pregunta": safe_extract_int(text_m.get("alignment_score", 0)),
+        "coherencia_discurs": safe_extract_int(text_m.get("coherence_score", 0)),
+        "densitat_informativa": safe_extract_int(text_m.get("information_density", 0)),
+        "especificitat": safe_extract_int(text_m.get("specificity_score", 0)),
+        
+        "wpm": safe_extract_int(audio.get("communication_rhythm_wpm", 0)),
+        "temps_parla": temps_parla_percent,
+        "emocio_predominant": emocio_text
+    }
+
+    ruta_pdf = generar_pdf_entrevista(dades_informe)
+
+    background_tasks.add_task(enviar_informe_per_correu, email_desti=usuari_actual.email, nom_usuari=usuari_actual.nom, ruta_pdf=ruta_pdf)
+
+    return FileResponse(ruta_pdf, filename=f"Informe_{usuari_actual.nom}.pdf", media_type='application/pdf')
 
 # ==========================================
 # GENERADOR PDF I PROVES
