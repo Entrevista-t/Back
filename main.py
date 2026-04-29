@@ -26,6 +26,9 @@ import uuid
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 
+from fastapi.responses import FileResponse
+from pdf_generator import generar_pdf_entrevista
+
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -744,6 +747,35 @@ async def analyze(
                 os.remove(tmp_path)
             except OSError:
                 pass
+
+# ==========================================
+# GENERADOR PDF
+# ==========================================
+
+
+@app.get("/test-pdf", tags=["Proves"])
+async def test_pdf():
+    # 1. Preparem les dades mock directament a l'API
+    dades_mock = {
+        "nom_usuari": "Alba Suri",
+        "data": "25 d'Abril, 2026",
+        "pregunta": "Quines diferències hi ha entre una arquitectura monolítica i una de microserveis?",
+        "score": 85,
+        "feedback_ia": "Has demostrat un gran domini tècnic. La teva explicació sobre el desacoblament de serveis ha estat brillant, tot i que podries millorar el contacte visual durant la meitat de la resposta.",
+        "wpm": 130,
+        "confiança": 92,
+        "emocio": "Positiva / Empatia"
+    } 
+    
+    # 2. Les enviem al teu fitxer pdf_generator
+    ruta_pdf = generar_pdf_entrevista(dades_mock)
+    
+    # 3. Retornem l'arxiu perquè el puguis descarregar
+    return FileResponse(
+        ruta_pdf, 
+        filename="informe_mock.pdf", 
+        media_type='application/pdf'
+    )
 
 # ==========================================
 # ENDPOINTS DE PROVA
