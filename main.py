@@ -739,27 +739,29 @@ async def analyze(
             m = result
             audio = m.get("audio_metrics", {})
             text_m = m.get("text_metrics", {})
-            video_m = m.get("video_metrics", [])
+            video_m = m.get("video_metrics", {})
 
-            # Funció antibales
-            def safe_extract_int(val, default=0):
-                if isinstance(val, (int, float)): return int(val)
+            # Helper: convert 0-1 float (or dict with known sub-key) to 0-100 int
+            def safe_pct(val, default=0):
+                if isinstance(val, (int, float)):
+                    v = float(val)
+                    return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
                 if isinstance(val, str):
-                    try: return int(float(val))
-                    except ValueError: return default
+                    try:
+                        v = float(val)
+                        return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
+                    except ValueError:
+                        return default
                 if isinstance(val, dict):
-                    for key in ["score", "value", "puntuacio", "index", "percentage"]:
-                        if key in val and isinstance(val[key], (int, float, str)):
-                            try: return int(float(val[key]))
-                            except ValueError: pass
-                    for v in val.values():
-                        if isinstance(v, (int, float)): return int(v)
+                    for key in ["score", "global_coherence", "value"]:
+                        if key in val:
+                            return safe_pct(val[key], default)
                 return default
 
-            # Filtre d'emoció
+            # Emotion label from video
             emocio_text = "Neutral"
             if isinstance(video_m, dict):
-                emocio_text = str(video_m.get("dominant_emotion", video_m.get("emocio", "Neutral"))).capitalize()
+                emocio_text = str(video_m.get("dominant_emotion", "Neutral")).capitalize()
             elif isinstance(video_m, list) and len(video_m) > 0:
                 from collections import Counter
                 emocions_text = [str(e) for e in video_m if isinstance(e, str)]
@@ -767,15 +769,28 @@ async def analyze(
             elif isinstance(video_m, str):
                 emocio_text = video_m.capitalize()
 
-            # Càlculs
-            durada = safe_extract_int(audio.get("duration_total", 1), default=1)
-            actiu = safe_extract_int(audio.get("active_speech_time", 0))
-            temps_parla_percent = min(100, int((actiu / durada) * 100)) if durada > 0 else 0
-            
-            raw_score = safe_extract_int(m.get("answer_quality_score", 0))
-            score_final = int(raw_score * 100) if raw_score <= 1 else raw_score
+            # Temps de parla
+            durada_f = float(audio.get("duration_total", 0) or 0)
+            actiu_f = float(audio.get("active_speech_time", 0) or 0)
+            temps_parla_percent = min(100, int((actiu_f / durada_f) * 100)) if durada_f > 0 else 0
 
-            # Mapeig
+            # Fluïdesa (mirrors frontend formula: speech_ratio * 0.5 + wpm_norm * 0.5)
+            sr = min(1.0, actiu_f / durada_f) if durada_f > 0 else 0.0
+            wpm_raw = float(audio.get("communication_rhythm_wpm", 0) or 0)
+            wpm_norm = max(0.0, 1.0 - abs(wpm_raw - 145) / 145)
+            fluidesa_val = min(100, max(0, int((sr * 0.5 + wpm_norm * 0.5) * 100)))
+
+            # Estabilitat emocional (std dev inverted: low std = high stability)
+            estabilitat_raw = 0.0
+            if isinstance(video_m, dict):
+                estabilitat_raw = float(video_m.get("emotional_stability", 0) or 0)
+            emocional_val = max(0, min(100, int((1.0 - estabilitat_raw) * 100)))
+
+            # Answer quality score (0-1 float from LLM)
+            raw_score_val = float(m.get("answer_quality_score", 0) or 0)
+            score_final = min(100, max(0, int(raw_score_val * 100 if raw_score_val <= 1.0 else raw_score_val)))
+
+            # Mapeig amb claus correctes del pipeline
             dades_informe = {
                 "nom_usuari": usuari_actual.nom,
                 "data": datetime.now().strftime("%d/%m/%Y"),
@@ -784,17 +799,17 @@ async def analyze(
                 "score": score_final,
                 "feedback_ia": m.get("llm_feedback", "Sense feedback."),
                 "qualitat": score_final,
-                "contingut": safe_extract_int(text_m.get("alignment_score", 0)), 
-                "fluidesa": safe_extract_int(text_m.get("fluency_score", 70)), 
-                "estructura": safe_extract_int(text_m.get("coherence_score", 0)),
-                "seguretat": safe_extract_int(audio.get("confidence_index", 0)),
-                "lexic": safe_extract_int(text_m.get("lexical_diversity", 0)),
-                "emocional": safe_extract_int(text_m.get("emotional_stability", 85)), 
-                "alineacio_pregunta": safe_extract_int(text_m.get("alignment_score", 0)),
-                "coherencia_discurs": safe_extract_int(text_m.get("coherence_score", 0)),
-                "densitat_informativa": safe_extract_int(text_m.get("information_density", 0)),
-                "especificitat": safe_extract_int(text_m.get("specificity_score", 0)),
-                "wpm": safe_extract_int(audio.get("communication_rhythm_wpm", 0)),
+                "contingut": safe_pct(text_m.get("question_alignment", 0)),
+                "fluidesa": fluidesa_val,
+                "estructura": safe_pct(text_m.get("discourse_coherence", 0)),
+                "seguretat": safe_pct(audio.get("confidence_index", 0)),
+                "lexic": safe_pct(text_m.get("lexical_richness", 0)),
+                "emocional": emocional_val,
+                "alineacio_pregunta": safe_pct(text_m.get("question_alignment", 0)),
+                "coherencia_discurs": safe_pct(text_m.get("discourse_coherence", 0)),
+                "densitat_informativa": safe_pct(text_m.get("information_density", 0)),
+                "especificitat": safe_pct(text_m.get("specificity_index", 0)),
+                "wpm": int(wpm_raw),
                 "temps_parla": temps_parla_percent,
                 "emocio_predominant": emocio_text
             }
