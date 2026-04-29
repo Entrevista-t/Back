@@ -764,58 +764,72 @@ async def analyze(
 # ==========================================
 
 
+# ==========================================
+# GENERADOR PDF I PROVES
+# ==========================================
+
 @app.get("/test-pdf", tags=["Proves"])
 async def test_pdf():
     # 1. Preparem les dades mock directament a l'API
     dades_mock = {
         "nom_usuari": "Alba Suri",
-        "data": "25 d'Abril, 2026",
-        "pregunta": "Quines diferències hi ha entre una arquitectura monolítica i una de microserveis?",
-        "score": 85,
-        "feedback_ia": "Has demostrat un gran domini tècnic. La teva explicació sobre el desacoblament de serveis ha estat brillant, tot i que podries millorar el contacte visual durant la meitat de la resposta.",
-        "wpm": 130,
-        "confiança": 92,
-        "emocio": "Positiva / Empatia"
+        "data": "29 d'Abril, 2026",
+        "pregunta": "Com dissenyaries un sistema de memòria cau (caching) eficaç?",
+        "score": 66,
+        "feedback_ia": "L'estructura de la teva resposta ha estat impecable i has mantingut molt bé les emocions, però t'has desviat lleugerament de la pregunta i el contingut podria ser més ric i específic.",
+        "contingut": 31,
+        "fluidesa": 78,
+        "estructura": 100,
+        "seguretat": 80,
+        "lexic": 89,
+        "emocional": 90,
+        "wpm": 161,
+        "temps_parla": 66,
+        "emocio_predominant": "Positiva"
     } 
     
-    # 2. Les enviem al teu fitxer pdf_generator
     ruta_pdf = generar_pdf_entrevista(dades_mock)
     
-    # 3. Retornem l'arxiu perquè el puguis descarregar
     return FileResponse(
         ruta_pdf, 
         filename="informe_mock.pdf", 
         media_type='application/pdf'
     )
 
+
 # ==========================================
 # ENVIAMENT DE CORREUS
 # ==========================================
 
+
 @app.post("/test-full-report", tags=["Proves"])
 async def test_full_report(background_tasks: BackgroundTasks, usuari_actual: Usuari = Depends(get_current_user)):
     """
-    1. Genera un PDF Mock.
+    1. Genera un PDF Mock amb les noves mètriques.
     2. L'envia al correu de l'usuari (en segon pla).
     3. Retorna el PDF al front-end per previsualitzar-lo.
     """
     
-    # 1. Dades mock per a l'informe
+    # 1. Dades mock per a l'informe adaptades al nou disseny
     dades_mock = {
-        "nom_usuari": usuari_actual.nom, # Agafem el nom real de l'usuari loguejat
+        "nom_usuari": usuari_actual.nom, # Agafem el nom real
         "data": "29 d'Abril, 2026",
-        "pregunta": "Quines diferències hi ha entre una arquitectura monolítica i una de microserveis?",
-        "score": 85,
-        "feedback_ia": "Has demostrat un gran domini tècnic. La teva explicació sobre el desacoblament de serveis ha estat brillant, tot i que podries millorar el contacte visual.",
-        "wpm": 130,
-        "confiança": 92,
-        "emocio": "Positiva / Empatia"
+        "pregunta": "Com dissenyaries un sistema de memòria cau (caching) eficaç?",
+        "score": 66,
+        "feedback_ia": "L'estructura de la teva resposta ha estat impecable i has mantingut molt bé les emocions, però t'has desviat lleugerament de la pregunta i el contingut podria ser més ric i específic.",
+        "contingut": 31,
+        "fluidesa": 78,
+        "estructura": 100,
+        "seguretat": 80,
+        "lexic": 89,
+        "emocional": 90,
+        "wpm": 161,
+        "temps_parla": 66,
+        "emocio_predominant": "Positiva"
     }
 
-    # 2. Generem el PDF físicament al servidor (/tmp/...)
     ruta_pdf = generar_pdf_entrevista(dades_mock)
 
-    # 3. Programem l'enviament del correu perquè es faci després de respondre al front
     background_tasks.add_task(
         enviar_informe_per_correu, 
         email_desti=usuari_actual.email, 
@@ -823,7 +837,6 @@ async def test_full_report(background_tasks: BackgroundTasks, usuari_actual: Usu
         ruta_pdf=ruta_pdf
     )
 
-    # 4. Retornem el fitxer al front perquè el navegador l'obri/descarregui
     return FileResponse(
         path=ruta_pdf, 
         filename=f"informe_{usuari_actual.nom}.pdf", 
