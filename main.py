@@ -788,7 +788,24 @@ async def analyze(
 
             # Answer quality score (0-1 float from LLM)
             raw_score_val = float(m.get("answer_quality_score", 0) or 0)
-            score_final = min(100, max(0, int(raw_score_val * 100 if raw_score_val <= 1.0 else raw_score_val)))
+            qualitat_val = min(100, max(0, int(raw_score_val * 100 if raw_score_val <= 1.0 else raw_score_val)))
+
+            # Compute individual metrics for mapping
+            contingut_val = safe_pct(text_m.get("question_alignment", 0))
+            estructura_val = safe_pct(text_m.get("discourse_coherence", 0))
+            seguretat_val = safe_pct(audio.get("confidence_index", 0))
+            lexic_val = safe_pct(text_m.get("lexical_richness", 0))
+
+            # Puntuació global = median of all 7 metrics (mirrors frontend)
+            all_scores = sorted([s for s in [
+                contingut_val, fluidesa_val, estructura_val, seguretat_val,
+                lexic_val, qualitat_val, emocional_val
+            ] if s > 0])
+            if all_scores:
+                mid = len(all_scores) // 2
+                score_final = all_scores[mid] if len(all_scores) % 2 == 1 else (all_scores[mid - 1] + all_scores[mid]) // 2
+            else:
+                score_final = 0
 
             # Mapeig amb claus correctes del pipeline
             dades_informe = {
@@ -798,12 +815,12 @@ async def analyze(
                 "transcripcio": m.get("transcript", "Sense transcripció."),
                 "score": score_final,
                 "feedback_ia": m.get("llm_feedback", "Sense feedback."),
-                "qualitat": score_final,
-                "contingut": safe_pct(text_m.get("question_alignment", 0)),
+                "qualitat": qualitat_val,
+                "contingut": contingut_val,
                 "fluidesa": fluidesa_val,
-                "estructura": safe_pct(text_m.get("discourse_coherence", 0)),
-                "seguretat": safe_pct(audio.get("confidence_index", 0)),
-                "lexic": safe_pct(text_m.get("lexical_richness", 0)),
+                "estructura": estructura_val,
+                "seguretat": seguretat_val,
+                "lexic": lexic_val,
                 "emocional": emocional_val,
                 "alineacio_pregunta": safe_pct(text_m.get("question_alignment", 0)),
                 "coherencia_discurs": safe_pct(text_m.get("discourse_coherence", 0)),
