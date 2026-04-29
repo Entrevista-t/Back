@@ -85,7 +85,7 @@ def analyze_interview(video_path: str, question: str, language: str = "ca") -> d
         }
 
     except Exception as e:
-        logger.error("Interview analysis failed: %s", e)
+        logger.error("Interview analysis failed: %s", e, exc_info=True)
         raise
 
     finally:

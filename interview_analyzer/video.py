@@ -6,6 +6,7 @@ classification. Processes a video file and returns aggregated emotion metrics.
 """
 
 import logging
+import os
 
 import cv2
 import numpy as np
@@ -13,6 +14,25 @@ import mediapipe as mp
 from deepface import DeepFace
 
 logger = logging.getLogger(__name__)
+
+
+def _suppress_stdout_stderr():
+    """Redirect stdout/stderr at the OS file-descriptor level (captures C++ output)."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    old_stdout_fd = os.dup(1)
+    old_stderr_fd = os.dup(2)
+    os.dup2(devnull, 1)
+    os.dup2(devnull, 2)
+    os.close(devnull)
+    return old_stdout_fd, old_stderr_fd
+
+
+def _restore_stdout_stderr(old_stdout_fd, old_stderr_fd):
+    """Restore stdout/stderr from saved file descriptors."""
+    os.dup2(old_stdout_fd, 1)
+    os.dup2(old_stderr_fd, 2)
+    os.close(old_stdout_fd)
+    os.close(old_stderr_fd)
 
 
 class InterviewAnalyzer:
@@ -43,14 +63,25 @@ class InterviewAnalyzer:
 
         self.prev_box = None
         self.last_result = None
+        self._first_process_done = False
 
         # MediaPipe FaceMesh
         self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.7,
-        )
+        try:
+            # Suppress the massive graph definition dump MediaPipe prints to stdout
+            old_out, old_err = _suppress_stdout_stderr()
+            try:
+                self.face_mesh = self.mp_face_mesh.FaceMesh(
+                    max_num_faces=1,
+                    refine_landmarks=True,
+                    min_detection_confidence=0.7,
+                )
+            finally:
+                _restore_stdout_stderr(old_out, old_err)
+            logger.info("MediaPipe FaceMesh initialized successfully")
+        except Exception as e:
+            logger.error("MediaPipe FaceMesh initialization failed: %s", e, exc_info=True)
+            raise
 
     def _get_bounding_box(self, face_landmarks, w, h):
         x_vals = [lm.x for lm in face_landmarks.landmark]
@@ -102,7 +133,22 @@ class InterviewAnalyzer:
     def process_frame(self, frame):
         h, w, _ = frame.shape
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(rgb_frame)
+
+        try:
+            # Suppress stdout on first process call (MediaPipe may dump graph here too)
+            if not self._first_process_done:
+                old_out, old_err = _suppress_stdout_stderr()
+                try:
+                    results = self.face_mesh.process(rgb_frame)
+                finally:
+                    _restore_stdout_stderr(old_out, old_err)
+                self._first_process_done = True
+            else:
+                results = self.face_mesh.process(rgb_frame)
+        except Exception as e:
+            logger.warning("FaceMesh.process() failed on frame %d: %s", self.frame_count, e)
+            self.frame_count += 1
+            return {"face_detected": False, "is_calibrated": self.is_calibrated, "result": None}
 
         output = {
             "face_detected": False,
@@ -144,8 +190,8 @@ class InterviewAnalyzer:
                             self.is_calibrated = True
                     else:
                         self.last_result = self._apply_logic(probs)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("DeepFace analysis failed on frame %d: %s", self.frame_count, e)
 
             if self.last_result:
                 output["result"] = self.last_result
@@ -166,6 +212,7 @@ def analyze_video(video_path: str) -> dict:
       - dominant_emotion: most frequent category
       - emotional_stability: lower = more stable (std dev of category changes)
     """
+    logger.info("Starting video analysis: %s", video_path)
     analyzer = InterviewAnalyzer()
     cap = cv2.VideoCapture(video_path)
 
@@ -173,8 +220,13 @@ def analyze_video(video_path: str) -> dict:
         logger.error("Cannot open video: %s", video_path)
         return _empty_video_result()
 
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    logger.info("Video opened: %d frames, %.1f fps", total_frames, fps)
+
     stats = {"positive": 0, "neutral": 0, "tense": 0}
     category_sequence = []
+    frames_processed = 0
 
     try:
         while cap.isOpened():
@@ -183,14 +235,21 @@ def analyze_video(video_path: str) -> dict:
                 break
 
             data = analyzer.process_frame(frame)
+            frames_processed += 1
 
             if data["is_calibrated"] and data["result"]:
                 cat = data["result"]["category"]
                 stats[cat] += 1
                 category_sequence.append(cat)
+    except Exception as e:
+        logger.error("Video frame loop failed at frame %d: %s", frames_processed, e, exc_info=True)
+        raise
     finally:
         cap.release()
         analyzer.close()
+
+    logger.info("Video analysis complete: %d frames processed, %d categorized",
+                frames_processed, len(category_sequence))
 
     total = sum(stats.values())
     if total == 0:
