@@ -26,8 +26,10 @@ import uuid
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 
+from fastapi import BackgroundTasks
 from fastapi.responses import FileResponse
 from pdf_generator import generar_pdf_entrevista
+from email_service import enviar_informe_per_correu
 
 #--------------------------------PASSWD HASHING CONTEXT--------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -774,6 +776,48 @@ async def test_pdf():
     return FileResponse(
         ruta_pdf, 
         filename="informe_mock.pdf", 
+        media_type='application/pdf'
+    )
+
+# ==========================================
+# ENVIAMENT DE CORREUS
+# ==========================================
+
+@app.post("/test-full-report", tags=["Proves"])
+async def test_full_report(background_tasks: BackgroundTasks, usuari_actual: Usuari = Depends(get_current_user)):
+    """
+    1. Genera un PDF Mock.
+    2. L'envia al correu de l'usuari (en segon pla).
+    3. Retorna el PDF al front-end per previsualitzar-lo.
+    """
+    
+    # 1. Dades mock per a l'informe
+    dades_mock = {
+        "nom_usuari": usuari_actual.nom, # Agafem el nom real de l'usuari loguejat
+        "data": "29 d'Abril, 2026",
+        "pregunta": "Quines diferències hi ha entre una arquitectura monolítica i una de microserveis?",
+        "score": 85,
+        "feedback_ia": "Has demostrat un gran domini tècnic. La teva explicació sobre el desacoblament de serveis ha estat brillant, tot i que podries millorar el contacte visual.",
+        "wpm": 130,
+        "confiança": 92,
+        "emocio": "Positiva / Empatia"
+    }
+
+    # 2. Generem el PDF físicament al servidor (/tmp/...)
+    ruta_pdf = generar_pdf_entrevista(dades_mock)
+
+    # 3. Programem l'enviament del correu perquè es faci després de respondre al front
+    background_tasks.add_task(
+        enviar_informe_per_correu, 
+        email_desti=usuari_actual.email, 
+        nom_usuari=usuari_actual.nom, 
+        ruta_pdf=ruta_pdf
+    )
+
+    # 4. Retornem el fitxer al front perquè el navegador l'obri/descarregui
+    return FileResponse(
+        path=ruta_pdf, 
+        filename=f"informe_{usuari_actual.nom}.pdf", 
         media_type='application/pdf'
     )
 
