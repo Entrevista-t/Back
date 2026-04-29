@@ -110,11 +110,7 @@ def generate_feedback(
         {json.dumps(metrics, indent=2)}
         """
 
-        # Afegim un timeout de 15 segons
-        response = model.generate_content(
-            user_prompt,
-            request_options={"timeout": 15.0} 
-        )
+        response = model.generate_content(user_prompt)
         result_json = json.loads(response.text)
 
         score = float(result_json.get("answer_quality_score", 0.0))
