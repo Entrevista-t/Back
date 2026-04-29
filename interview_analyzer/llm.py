@@ -114,6 +114,8 @@ def generate_feedback(
         result_json = json.loads(response.text)
 
         score = float(result_json.get("answer_quality_score", 0.0))
+        # Gemini returns 0–100; normalize to 0.0–1.0 for the frontend
+        score = max(0.0, min(score / 100.0, 1.0))
         feedback_text = str(result_json.get("feedback", _FALLBACK_FEEDBACK))
 
         logger.info("Feedback de Gemini generat amb èxit. Score: %s", score)
