@@ -689,31 +689,30 @@ def list_user_interviews(
 
 @app.post("/analyze", tags=["Anàlisi"])
 async def analyze(
+    background_tasks: BackgroundTasks, # 👈 NOU: Necessari per enviar el correu en segon pla
     video: UploadFile = File(..., description="Video file of the interview answer"),
     question: str = Form(..., description="The interviewer's question text"),
     language: str = Form("ca", description="Language hint for transcription"),
-    id_entrevista: int = Form(..., description="L'ID de l'entrevista pendent"), # NOU: Demanem l'ID
-    db: Session = Depends(get_db), # NOU: Ens connectem a la BD
+    id_entrevista: int = Form(..., description="L'ID de l'entrevista pendent"),
+    db: Session = Depends(get_db),
     usuari_actual: Usuari = Depends(get_current_user),
 ):
     """
-    Analitza el vídeo del candidat, extreu-ne les mètriques i les guarda a la base de dades.
+    Analitza el vídeo del candidat, en guarda les mètriques i automàticament 
+    genera i envia l'informe PDF per correu electrònic.
     """
     
-    # 1. Busquem l'entrevista a la BD i comprovem que sigui del nostre usuari
     entrevista = db.query(Entrevista).filter(Entrevista.id == id_entrevista).first()
     if not entrevista:
         raise HTTPException(status_code=404, detail="Entrevista no trobada")
     if entrevista.id_usuari != usuari_actual.id:
         raise HTTPException(status_code=403, detail="No tens permís per modificar aquesta entrevista")
 
-    # 2. Avisem a la BD que comencem a processar (per si el front-end pregunta l'estat)
     entrevista.estat_proces = "processant"
     db.commit()
 
     tmp_path = None
     try:
-        # Guardem el vídeo temporalment
         suffix = os.path.splitext(video.filename or ".mp4")[1].lower()
         if suffix not in ALLOWED_VIDEO_EXTENSIONS:
             raise HTTPException(status_code=400, detail="Format de vídeo no suportat")
@@ -727,138 +726,106 @@ async def analyze(
                     raise HTTPException(status_code=413, detail="L'arxiu és massa gran")
                 tmp.write(chunk)
 
-        # 3. Executem TOTA la teva IA de cop en un fil separat (per no bloquejar l'API)
+        # 3. Executem TOTA la IA
         result = await asyncio.to_thread(analyze_interview, tmp_path, question, language)
 
-        # 4. EXCEŀLENT: Guardem els resultats a la BD i posem l'estat en completat
+        # 4. Guardem a la BD
         entrevista.metriques = result
         entrevista.estat_proces = "completat"
         db.commit()
 
+        # 🚀 5. INICI: GENERACIÓ I ENVIAMENT AUTOMÀTIC DEL PDF 🚀
+        try:
+            m = result
+            audio = m.get("audio_metrics", {})
+            text_m = m.get("text_metrics", {})
+            video_m = m.get("video_metrics", [])
+
+            # Funció antibales
+            def safe_extract_int(val, default=0):
+                if isinstance(val, (int, float)): return int(val)
+                if isinstance(val, str):
+                    try: return int(float(val))
+                    except ValueError: return default
+                if isinstance(val, dict):
+                    for key in ["score", "value", "puntuacio", "index", "percentage"]:
+                        if key in val and isinstance(val[key], (int, float, str)):
+                            try: return int(float(val[key]))
+                            except ValueError: pass
+                    for v in val.values():
+                        if isinstance(v, (int, float)): return int(v)
+                return default
+
+            # Filtre d'emoció
+            emocio_text = "Neutral"
+            if isinstance(video_m, dict):
+                emocio_text = str(video_m.get("dominant_emotion", video_m.get("emocio", "Neutral"))).capitalize()
+            elif isinstance(video_m, list) and len(video_m) > 0:
+                from collections import Counter
+                emocions_text = [str(e) for e in video_m if isinstance(e, str)]
+                if emocions_text: emocio_text = Counter(emocions_text).most_common(1)[0][0].capitalize()
+            elif isinstance(video_m, str):
+                emocio_text = video_m.capitalize()
+
+            # Càlculs
+            durada = safe_extract_int(audio.get("duration_total", 1), default=1)
+            actiu = safe_extract_int(audio.get("active_speech_time", 0))
+            temps_parla_percent = min(100, int((actiu / durada) * 100)) if durada > 0 else 0
+            
+            raw_score = safe_extract_int(m.get("answer_quality_score", 0))
+            score_final = int(raw_score * 100) if raw_score <= 1 else raw_score
+
+            # Mapeig
+            dades_informe = {
+                "nom_usuari": usuari_actual.nom,
+                "data": datetime.now().strftime("%d/%m/%Y"),
+                "pregunta": question,
+                "transcripcio": m.get("transcript", "Sense transcripció."),
+                "score": score_final,
+                "feedback_ia": m.get("llm_feedback", "Sense feedback."),
+                "qualitat": score_final,
+                "contingut": safe_extract_int(text_m.get("alignment_score", 0)), 
+                "fluidesa": safe_extract_int(text_m.get("fluency_score", 70)), 
+                "estructura": safe_extract_int(text_m.get("coherence_score", 0)),
+                "seguretat": safe_extract_int(audio.get("confidence_index", 0)),
+                "lexic": safe_extract_int(text_m.get("lexical_diversity", 0)),
+                "emocional": safe_extract_int(text_m.get("emotional_stability", 85)), 
+                "alineacio_pregunta": safe_extract_int(text_m.get("alignment_score", 0)),
+                "coherencia_discurs": safe_extract_int(text_m.get("coherence_score", 0)),
+                "densitat_informativa": safe_extract_int(text_m.get("information_density", 0)),
+                "especificitat": safe_extract_int(text_m.get("specificity_score", 0)),
+                "wpm": safe_extract_int(audio.get("communication_rhythm_wpm", 0)),
+                "temps_parla": temps_parla_percent,
+                "emocio_predominant": emocio_text
+            }
+
+            ruta_pdf = generar_pdf_entrevista(dades_informe)
+            background_tasks.add_task(enviar_informe_per_correu, email_desti=usuari_actual.email, nom_usuari=usuari_actual.nom, ruta_pdf=ruta_pdf)
+            logger.info("PDF generat i programat per enviament automàtic.")
+        except Exception as e:
+            logger.error(f"Error generant PDF automàtic: {e}")
+            # No aturem el procés, l'anàlisi ja està guardat amb èxit.
+        # 🚀 FI: CODI AUTOMÀTIC 🚀
+
         return JSONResponse(content={
-            "message": "Anàlisi completat correctament",
+            "message": "Anàlisi completat correctament i informe enviat per correu.",
             "id_entrevista": entrevista.id,
-            "estat": entrevista.estat_proces
+            "estat": entrevista.estat_proces,
+            "metriques": result
         })
 
     except HTTPException:
-        # Si hi ha hagut un error controlat (ex: arxiu massa gran), no toquem la BD
         raise
     except Exception as e:
-        # Si la IA peta, posem l'estat a error perquè l'usuari no es quedi esperant eternament
         logger.error("Analysis endpoint error: %s", e)
         entrevista.estat_proces = "error"
         db.commit()
         raise HTTPException(status_code=500, detail="L'anàlisi del vídeo ha fallat.")
 
     finally:
-        # 5. Esborrem el vídeo pesat per no omplir el disc dur del servidor
         if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-
-# ==========================================
-# GENERADOR PDF
-# ==========================================
-
-@app.post("/entrevistas/{id}/enviar-informe", tags=["Entrevistes"])
-async def enviar_informe(
-    id: int,
-    background_tasks: BackgroundTasks, 
-    db: Session = Depends(get_db),
-    usuari_actual: Usuari = Depends(get_current_user)
-):
-    """
-    Recupera les mètriques reals, genera el PDF personalitzat i l'envia.
-    """
-    entrevista = db.query(Entrevista).filter(Entrevista.id == id).first()
-    if not entrevista:
-        raise HTTPException(status_code=404, detail="Entrevista no trobada")
-    if entrevista.id_usuari != usuari_actual.id:
-        raise HTTPException(status_code=403, detail="No tens permís")
-    if entrevista.estat_proces != "completat" or not entrevista.metriques:
-        raise HTTPException(status_code=400, detail="Mètriques no disponibles")
-
-    pregunta = db.query(Pregunta).filter(Pregunta.id == entrevista.id_pregunta).first()
-    text_pregunta = pregunta.text_pregunta if pregunta else "Simulació d'entrevista"
-
-    m = entrevista.metriques
-    audio = m.get("audio_metrics", {})
-    text_m = m.get("text_metrics", {})
-    video_m = m.get("video_metrics", [])
-
-    # ✅ FUNCIÓ ANTIBALES PER EXTREURE NÚMEROS (Evita el TypeError)
-    def safe_extract_int(val, default=0):
-        if isinstance(val, (int, float)):
-            return int(val)
-        if isinstance(val, str):
-            try: return int(float(val))
-            except ValueError: return default
-        if isinstance(val, dict):
-            for key in ["score", "value", "puntuacio", "index", "percentage"]:
-                if key in val and isinstance(val[key], (int, float, str)):
-                    try: return int(float(val[key]))
-                    except ValueError: pass
-            for v in val.values():
-                if isinstance(v, (int, float)):
-                    return int(v)
-        return default
-
-    # ✅ FILTRE PER L'EMOCIÓ
-    emocio_text = "Neutral"
-    if isinstance(video_m, dict):
-        emocio_text = str(video_m.get("dominant_emotion", video_m.get("emocio", "Neutral"))).capitalize()
-    elif isinstance(video_m, list) and len(video_m) > 0:
-        from collections import Counter
-        emocions_text = [str(e) for e in video_m if isinstance(e, str)]
-        if emocions_text:
-            emocio_text = Counter(emocions_text).most_common(1)[0][0].capitalize()
-    elif isinstance(video_m, str):
-        emocio_text = video_m.capitalize()
-
-    # Càlculs
-    durada = safe_extract_int(audio.get("duration_total", 1), default=1)
-    actiu = safe_extract_int(audio.get("active_speech_time", 0))
-    temps_parla_percent = min(100, int((actiu / durada) * 100)) if durada > 0 else 0
-    
-    raw_score = safe_extract_int(m.get("answer_quality_score", 0))
-    score_final = int(raw_score * 100) if raw_score <= 1 else raw_score
-
-    # ✅ MAPEIG FINAL AL TEU HTML
-    dades_informe = {
-        "nom_usuari": usuari_actual.nom,
-        "data": datetime.now().strftime("%d/%m/%Y"),
-        "pregunta": text_pregunta,
-        "transcripcio": m.get("transcript", "Sense transcripció."),
-        
-        "score": score_final,
-        "feedback_ia": m.get("llm_feedback", "Sense feedback."),
-        "qualitat": score_final,
-        
-        "contingut": safe_extract_int(text_m.get("alignment_score", 0)), 
-        "fluidesa": safe_extract_int(text_m.get("fluency_score", 70)), 
-        "estructura": safe_extract_int(text_m.get("coherence_score", 0)),
-        "seguretat": safe_extract_int(audio.get("confidence_index", 0)),
-        "lexic": safe_extract_int(text_m.get("lexical_diversity", 0)),
-        "emocional": safe_extract_int(text_m.get("emotional_stability", 85)), 
-        
-        "alineacio_pregunta": safe_extract_int(text_m.get("alignment_score", 0)),
-        "coherencia_discurs": safe_extract_int(text_m.get("coherence_score", 0)),
-        "densitat_informativa": safe_extract_int(text_m.get("information_density", 0)),
-        "especificitat": safe_extract_int(text_m.get("specificity_score", 0)),
-        
-        "wpm": safe_extract_int(audio.get("communication_rhythm_wpm", 0)),
-        "temps_parla": temps_parla_percent,
-        "emocio_predominant": emocio_text
-    }
-
-    ruta_pdf = generar_pdf_entrevista(dades_informe)
-
-    background_tasks.add_task(enviar_informe_per_correu, email_desti=usuari_actual.email, nom_usuari=usuari_actual.nom, ruta_pdf=ruta_pdf)
-
-    return FileResponse(ruta_pdf, filename=f"Informe_{usuari_actual.nom}.pdf", media_type='application/pdf')
+            try: os.remove(tmp_path)
+            except OSError: pass
 
 # ==========================================
 # GENERADOR PDF I PROVES
