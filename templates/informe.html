@@ -1,306 +1,893 @@
 <!DOCTYPE html>
-<html>
+<html lang="ca">
 <head>
     <meta charset="UTF-8">
     <style>
+        /* ══════════════════════════════════════════════════════════════
+           Design Tokens — mirrors Entrevista't front-end
+           All values inlined for WeasyPrint compatibility (no CSS vars)
+           Fonts: system-safe stack matching Satoshi/Gambetta aesthetic
+           ══════════════════════════════════════════════════════════════ */
+
         @page {
             size: A4;
-            margin: 20mm;
-            @bottom-right { 
-                content: "Pàgina " counter(page) " de " counter(pages); 
-                font-size: 9pt; 
-                color: #B39DDB; 
+            margin: 18mm 20mm;
+            @bottom-center {
+                content: "Pàgina " counter(page) " de " counter(pages);
+                font-size: 8pt;
+                color: #AAABB8;
             }
         }
-        
-        body { 
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
-            color: #333333; 
-            line-height: 1.6; 
-            max-width: 800px; 
-            margin: 0 auto; 
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            color: #484B6A;
+            line-height: 1.6;
+            background: #FAFAFA;
+            max-width: 780px;
+            margin: 0 auto;
+            font-size: 10pt;
         }
 
-        /* Capçalera */
-        .header { 
-            border-bottom: 2px solid #E1BEE7; 
-            padding-bottom: 15px; 
-            margin-bottom: 30px; 
-        }
-        h1 { 
-            font-size: 22pt; 
-            margin-bottom: 5px; 
-            color: #4A4A4A;
-        }
-        .header p { margin: 5px 0; font-size: 11pt; color: #666; }
-        .highlight-text { color: #7E57C2; font-weight: bold; }
-
-        /* Puntuació Global i Feedback */
-        .top-section {
+        /* ── Header ─────────────────────────────────────────────────── */
+        .header {
             display: flex;
-            margin-bottom: 30px;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 16px;
+            margin-bottom: 28px;
+            border-bottom: 1px solid #E4E5F1;
         }
-        .global-score {
+        .header-left h1 {
+            font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+            font-size: 22pt;
+            font-weight: 600;
+            color: #484B6A;
+            margin-bottom: 4px;
+            letter-spacing: -0.3px;
+        }
+        .header-left .subtitle {
+            font-size: 9pt;
+            color: #9394A5;
+            font-weight: 400;
+        }
+        .header-meta {
+            text-align: right;
+            font-size: 9pt;
+            color: #9394A5;
+            line-height: 1.8;
+        }
+        .header-meta strong {
+            color: #6366F1;
+            font-weight: 600;
+        }
+
+        /* ── Global Score Ring ──────────────────────────────────────── */
+        .score-section {
             text-align: center;
-            padding: 20px;
-            background-color: #F8F9FA;
-            border-radius: 12px;
-            width: 30%;
-            border: 1px solid #E1BEE7;
+            margin-bottom: 24px;
+            padding: 24px 0;
+            background: linear-gradient(180deg, rgba(99,102,241,0.03) 0%, transparent 100%);
+            border-radius: 16px;
         }
-        .global-score h2 {
-            margin: 0;
-            font-size: 12pt;
-            color: #7E57C2;
-            text-transform: uppercase;
+        .score-ring {
+            display: inline-block;
+            position: relative;
+            width: 130px;
+            height: 130px;
         }
-        .global-score .score-value {
-            font-size: 42pt;
-            font-weight: bold;
-            color: #FFA726; /* Color taronja com al front */
+        .score-ring svg {
+            transform: rotate(-90deg);
+        }
+        .score-ring .track {
+            fill: none;
+            stroke: #E4E5F1;
+            stroke-width: 10;
+        }
+        .score-ring .fill {
+            fill: none;
+            stroke-width: 10;
+            stroke-linecap: round;
+        }
+        .score-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .score-label .value {
+            font-size: 26pt;
+            font-weight: 700;
             line-height: 1;
-            margin-top: 10px;
         }
-        .feedback-box {
-            margin-left: 20px;
-            padding: 20px;
-            background-color: #F3E5F5;
+        .score-label .caption {
+            font-size: 8pt;
+            color: #9394A5;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        /* ── Cards ──────────────────────────────────────────────────── */
+        .card {
+            background: #F2F2F6;
+            border: 1px solid #E4E5F1;
             border-radius: 12px;
-            width: 65%;
+            padding: 20px;
+            margin-bottom: 16px;
         }
-        .feedback-box h3 {
-            margin: 0 0 10px 0;
-            color: #7E57C2;
-            font-size: 12pt;
-        }
-        .feedback-box p {
-            margin: 0;
+        .section-header {
             font-size: 11pt;
+            font-weight: 600;
+            color: #484B6A;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-header .icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 6px;
+            height: 6px;
+            background: #6366F1;
+            border-radius: 50%;
+        }
+
+        /* ── Feedback Card (gradient top border via wrapper) ─────── */
+        .feedback-wrapper {
+            margin-bottom: 16px;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .feedback-gradient-bar {
+            height: 3px;
+            background: linear-gradient(90deg, #6366F1, #8B5CF6);
+        }
+        .feedback-card {
+            background: #F2F2F6;
+            border: 1px solid #E4E5F1;
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            padding: 20px;
+        }
+        .feedback-text {
+            font-size: 10pt;
+            color: #9394A5;
+            line-height: 1.7;
             text-align: justify;
         }
 
-        /* Secció de Rendiment (Barres) */
-        .section-title {
-            font-size: 16pt;
-            color: #4A4A4A;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #EEE;
-            padding-bottom: 5px;
-        }
-        .metrics-grid {
-            margin-bottom: 30px;
-        }
-        .metric-row {
-            margin-bottom: 12px;
-        }
-        .metric-header {
+        /* ── Performance Circles Row ───────────────────────────────── */
+        .perf-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 4px;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .perf-item {
+            text-align: center;
+            flex: 1;
+            min-width: 80px;
+        }
+        .perf-item .mini-ring {
+            display: inline-block;
+            position: relative;
+            width: 60px;
+            height: 60px;
+        }
+        .perf-item .mini-ring svg {
+            transform: rotate(-90deg);
+        }
+        .perf-item .mini-ring .track {
+            fill: none;
+            stroke: #E4E5F1;
+            stroke-width: 6;
+        }
+        .perf-item .mini-ring .fill {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+        .perf-item .mini-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             font-size: 11pt;
-            font-weight: bold;
-            color: #555;
+            font-weight: 600;
+            color: #484B6A;
         }
-        .bar-bg {
-            width: 100%;
-            height: 10px;
-            background-color: #EEEEEE;
-            border-radius: 5px;
-            overflow: hidden;
+        .perf-item .perf-name {
+            font-size: 8pt;
+            color: #9394A5;
+            margin-top: 6px;
+            font-weight: 500;
         }
-        .bar-fill {
-            height: 100%;
-            background-color: #26A69A; /* Verd per defecte */
-            border-radius: 5px;
-        }
-        /* Colors condicionals per a les barres (pots ajustar-ho a Python si vols) */
-        .bar-fill.purple { background-color: #7E57C2; }
 
-        /* Detalls Tècnics (Capses inferiors) */
-        .tech-details {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-        .tech-card {
-            background-color: #FAFAFA;
-            border: 1px solid #E0E0E0;
+        /* ── Question Box ──────────────────────────────────────────── */
+        .question-box {
+            background: rgba(99,102,241,0.04);
+            border: 1px solid rgba(99,102,241,0.15);
             border-radius: 8px;
-            padding: 15px;
-            width: 30%;
+            padding: 12px 14px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+        .question-box .q-icon {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #6366F1;
+            border-radius: 50%;
+            margin-top: 6px;
+            flex-shrink: 0;
+        }
+        .question-box .q-text {
+            font-size: 10pt;
+            color: #6366F1;
+            font-weight: 500;
+            font-style: italic;
+            line-height: 1.5;
+        }
+
+        /* ── Transcript ────────────────────────────────────────────── */
+        .transcript-text {
+            font-size: 10pt;
+            color: #9394A5;
+            line-height: 1.7;
+        }
+
+        /* ── Detail Cards Row ──────────────────────────────────────── */
+        .detail-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .detail-card {
+            flex: 1;
+            background: #F2F2F6;
+            border: 1px solid #E4E5F1;
+            border-radius: 12px;
+            padding: 14px 10px;
             text-align: center;
         }
-        .tech-val {
-            font-size: 18pt;
-            font-weight: bold;
-            color: #7E57C2;
+        .detail-card .d-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: rgba(99,102,241,0.07);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #6366F1;
         }
-        .tech-label {
-            font-size: 10pt;
-            color: #777;
+        .detail-card .d-value {
+            font-size: 13pt;
+            font-weight: 600;
+            color: #484B6A;
+        }
+        .detail-card .d-label {
+            font-size: 7.5pt;
+            color: #9394A5;
             text-transform: uppercase;
-            margin-top: 5px;
+            letter-spacing: 0.3px;
+            margin-top: 4px;
         }
 
-        /* ==========================================
-           ESTILS DE L'ANNEX
-           ========================================== */
-        .annex-container {
-            page-break-before: always; 
-            break-before: page; 
-            padding-top: 20px; 
-        }
-        .annex-intro {
-            font-size: 11pt;
-            color: #555;
-            margin-bottom: 25px;
-        }
-        .annex-item {
-            margin-bottom: 20px;
-            background-color: #FAFAFA;
-            padding: 15px;
-            border-left: 4px solid #B39DDB;
-            border-radius: 0 8px 8px 0;
+        /* ══════════════════════════════════════════════════════════════
+           ANNEX — Detailed Metric Glossary
+           ══════════════════════════════════════════════════════════════ */
+        .annex-page {
+            page-break-before: always;
+            break-before: page;
+            padding-top: 10px;
         }
         .annex-title {
-            font-weight: bold;
-            color: #7E57C2;
-            font-size: 12pt;
-            margin-bottom: 5px;
+            font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+            font-size: 18pt;
+            font-weight: 600;
+            color: #484B6A;
+            margin-bottom: 6px;
         }
-        .annex-desc {
-            font-size: 11pt;
-            color: #444;
+        .annex-subtitle {
+            font-size: 9pt;
+            color: #9394A5;
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+        .annex-item {
+            margin-bottom: 16px;
+            background: #FFFFFF;
+            border: 1px solid #E4E5F1;
+            border-left: 4px solid #6366F1;
+            border-radius: 0 8px 8px 0;
+            padding: 14px 16px;
+        }
+        .annex-item-title {
+            font-weight: 600;
+            font-size: 10.5pt;
+            color: #6366F1;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .annex-item-desc {
+            font-size: 9pt;
+            color: #9394A5;
+            line-height: 1.65;
             margin: 0;
+        }
+        .annex-item-desc strong {
+            color: #484B6A;
+            font-weight: 600;
+        }
+        .annex-tip {
+            margin-top: 6px;
+            font-size: 8.5pt;
+            color: #14B8A6;
+            font-weight: 500;
+        }
+        .annex-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .annex-score-badge {
+            font-size: 10pt;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 100px;
+            white-space: nowrap;
+        }
+        .badge-good { background: rgba(34,197,94,0.1); color: #22C55E; }
+        .badge-mid  { background: rgba(245,158,11,0.1); color: #F59E0B; }
+        .badge-low  { background: rgba(239,68,68,0.1); color: #EF4444; }
+        .badge-neutral { background: rgba(99,102,241,0.08); color: #6366F1; }
+
+        /* ── Metrics Detail List ───────────────────────────────────── */
+        .metrics-list {
+            margin-bottom: 16px;
+        }
+        .metric-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #E4E5F1;
+        }
+        .metric-item:last-child {
+            border-bottom: none;
+        }
+        .metric-icon-box {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 8px;
+            height: 8px;
+            background: #6366F1;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .metric-info {
+            flex: 1;
+            margin-left: 12px;
+        }
+        .metric-name {
+            font-size: 10pt;
+            font-weight: 600;
+            color: #484B6A;
+        }
+        .metric-desc {
+            font-size: 8pt;
+            color: #AAABB8;
+            line-height: 1.4;
+            margin-top: 1px;
+        }
+        .metric-value {
+            font-size: 10pt;
+            font-weight: 600;
+            color: #6366F1;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+
+        /* ── Score color utilities ─────────────────────────────────── */
+        .score-good { color: #22C55E; }
+        .score-mid { color: #F59E0B; }
+        .score-low { color: #EF4444; }
+        .stroke-good { stroke: #22C55E; }
+        .stroke-mid { stroke: #F59E0B; }
+        .stroke-low { stroke: #EF4444; }
+        .stroke-accent { stroke: #6366F1; }
+
+        /* ── Footer ────────────────────────────────────────────────── */
+        .footer {
+            margin-top: 30px;
+            padding-top: 12px;
+            border-top: 1px solid #E4E5F1;
+            text-align: center;
+            font-size: 8pt;
+            color: #AAABB8;
         }
     </style>
 </head>
 <body>
+
+    <!-- ═══════════ HEADER ═══════════ -->
     <div class="header">
-        <h1>Informe d'entrevista</h1>
-        <p><span class="highlight-text">Candidat/a:</span> {{ nom_usuari }}</p>
-        <p><span class="highlight-text">Data:</span> {{ data }}</p>
-        <p><span class="highlight-text">Pregunta:</span> {{ pregunta }}</p>
-    </div>
-
-    <div class="top-section">
-        <div class="global-score">
-            <h2>Puntuació Global</h2>
-            <div class="score-value">{{ score }}%</div>
+        <div class="header-left">
+            <h1>Informe d'Entrevista</h1>
+            <span class="subtitle">Generat automàticament per Entrevista't</span>
         </div>
-        <div class="feedback-box">
-            <h3>✨ Feedback de la IA</h3>
-            <p>{{ feedback_ia }}</p>
+        <div class="header-meta">
+            <strong>Candidat/a:</strong> {{ nom_usuari }}<br>
+            <strong>Data:</strong> {{ data }}<br>
+            <strong>Pregunta:</strong> {{ pregunta }}
         </div>
     </div>
 
-    <h2 class="section-title">Detall de Rendiment</h2>
-    <div class="metrics-grid">
-        
-        <div class="metric-row">
-            <div class="metric-header"><span>Contingut</span> <span>{{ contingut }}%</span></div>
-            <div class="bar-bg"><div class="bar-fill purple" style="width: {{ contingut }}%;"></div></div>
-        </div>
-        <div class="metric-row">
-            <div class="metric-header"><span>Fluïdesa</span> <span>{{ fluidesa }}%</span></div>
-            <div class="bar-bg"><div class="bar-fill purple" style="width: {{ fluidesa }}%;"></div></div>
-        </div>
-        <div class="metric-row">
-            <div class="metric-header"><span>Estructura</span> <span>{{ estructura }}%</span></div>
-            <div class="bar-bg"><div class="bar-fill purple" style="width: {{ estructura }}%;"></div></div>
-        </div>
-        <div class="metric-row">
-            <div class="metric-header"><span>Seguretat</span> <span>{{ seguretat }}%</span></div>
-            <div class="bar-bg"><div class="bar-fill purple" style="width: {{ seguretat }}%;"></div></div>
-        </div>
-        <div class="metric-row">
-            <div class="metric-header"><span>Riquesa lèxica</span> <span>{{ lexic }}%</span></div>
-            <div class="bar-bg"><div class="bar-fill purple" style="width: {{ lexic }}%;"></div></div>
-        </div>
-        <div class="metric-row">
-            <div class="metric-header"><span>Estabilitat emocional</span> <span>{{ emocional }}%</span></div>
-            <div class="bar-bg"><div class="bar-fill purple" style="width: {{ emocional }}%;"></div></div>
-        </div>
-
-    </div>
-
-    <h2 class="section-title">Altres indicadors</h2>
-    <div class="tech-details">
-        <div class="tech-card">
-            <div class="tech-val">{{ wpm }}</div>
-            <div class="tech-label">Paraules / Minut</div>
-        </div>
-        <div class="tech-card">
-            <div class="tech-val">{{ temps_parla }}%</div>
-            <div class="tech-label">Temps de parla</div>
-        </div>
-        <div class="tech-card">
-            <div class="tech-val">{{ emocio_predominant }}</div>
-            <div class="tech-label">Emoció predominant</div>
+    <!-- ═══════════ GLOBAL SCORE ═══════════ -->
+    <div class="score-section">
+        <div class="score-ring">
+            <svg width="130" height="130" viewBox="0 0 130 130">
+                <circle class="track" cx="65" cy="65" r="55"/>
+                <circle class="fill stroke-accent" cx="65" cy="65" r="55"
+                    stroke-dasharray="{{ (score|float * 345.58) / 100 }} 345.58"/>
+            </svg>
+            <div class="score-label">
+                <div class="value {% if score|float >= 75 %}score-good{% elif score|float >= 50 %}score-mid{% else %}score-low{% endif %}">{{ score }}%</div>
+                <div class="caption">Puntuació global</div>
+            </div>
         </div>
     </div>
 
-    <div class="annex-container">
-        <h2 class="section-title">Annex: Glossari de Mètriques</h2>
-        <p class="annex-intro">
-            A continuació es detalla què mesura cadascun dels indicadors avaluats durant la teva simulació, per entendre millor els resultats obtinguts.
+    <!-- ═══════════ AI FEEDBACK ═══════════ -->
+    <div class="feedback-wrapper">
+        <div class="feedback-gradient-bar"></div>
+        <div class="feedback-card">
+            <div class="section-header">
+                <span class="icon"></span>
+                <span>Feedback de la IA</span>
+            </div>
+            <p class="feedback-text">{{ feedback_ia }}</p>
+        </div>
+    </div>
+
+    <!-- ═══════════ PERFORMANCE CIRCLES ═══════════ -->
+    <div class="card">
+        <div class="section-header">
+            <span class="icon"></span>
+            <span>Rendiment</span>
+        </div>
+        <div class="perf-row">
+            {% set metrics = [
+                ('Contingut', contingut),
+                ('Fluïdesa', fluidesa),
+                ('Estructura', estructura),
+                ('Seguretat', seguretat),
+                ('Lèxic', lexic),
+                ('Qualitat', qualitat|default(0)),
+                ('Emocional', emocional)
+            ] %}
+            {% for name, val in metrics %}
+            <div class="perf-item">
+                <div class="mini-ring">
+                    <svg width="60" height="60" viewBox="0 0 60 60">
+                        <circle class="track" cx="30" cy="30" r="24"/>
+                        <circle class="fill {% if val|float >= 75 %}stroke-good{% elif val|float >= 50 %}stroke-mid{% else %}stroke-low{% endif %}"
+                            cx="30" cy="30" r="24"
+                            stroke-dasharray="{{ (val|float * 150.8) / 100 }} 150.8"/>
+                    </svg>
+                    <span class="mini-label">{{ val|int }}%</span>
+                </div>
+                <div class="perf-name">{{ name }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ═══════════ TRANSCRIPT ═══════════ -->
+    {% if transcripcio is defined and transcripcio %}
+    <div class="card">
+        <div class="section-header">
+            <span class="icon"></span>
+            <span>Transcripció</span>
+        </div>
+        <div class="question-box">
+            <span class="q-icon"></span>
+            <span class="q-text">{{ pregunta }}</span>
+        </div>
+        <p class="transcript-text">{{ transcripcio }}</p>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════ DETAIL CARDS ═══════════ -->
+    <div class="detail-row">
+        <div class="detail-card">
+            <div class="d-icon">W</div>
+            <div class="d-value">{{ wpm }}</div>
+            <div class="d-label">Paraules / Minut</div>
+        </div>
+        <div class="detail-card">
+            <div class="d-icon">T</div>
+            <div class="d-value">{{ temps_parla }}%</div>
+            <div class="d-label">Temps de parla</div>
+        </div>
+        <div class="detail-card">
+            <div class="d-icon">E</div>
+            <div class="d-value">{{ emocio_predominant }}</div>
+            <div class="d-label">Emoció predominant</div>
+        </div>
+        <div class="detail-card">
+            <div class="d-icon">L</div>
+            <div class="d-value">{{ lexic }}%</div>
+            <div class="d-label">Riquesa lèxica</div>
+        </div>
+    </div>
+
+    <!-- ═══════════ FULL METRICS LIST ═══════════ -->
+    <div class="card">
+        <div class="section-header">
+            <span class="icon"></span>
+            <span>Detall de mètriques</span>
+        </div>
+        <div class="metrics-list">
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Contingut</div>
+                    <div class="metric-desc">Mitjana d'alineació amb la pregunta, densitat informativa i especificitat.</div>
+                </div>
+                <div class="metric-value">{{ contingut }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Fluïdesa</div>
+                    <div class="metric-desc">Combinació del ritme de parla i la proporció de temps parlant.</div>
+                </div>
+                <div class="metric-value">{{ fluidesa }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Estructura</div>
+                    <div class="metric-desc">Coherència global del discurs: connexió lògica entre les idees.</div>
+                </div>
+                <div class="metric-value">{{ estructura }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Seguretat</div>
+                    <div class="metric-desc">Índex de confiança basat en el to de veu i fermesa.</div>
+                </div>
+                <div class="metric-value">{{ seguretat }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Riquesa lèxica</div>
+                    <div class="metric-desc">Varietat i riquesa del vocabulari emprat en la resposta.</div>
+                </div>
+                <div class="metric-value">{{ lexic }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Qualitat de la resposta</div>
+                    <div class="metric-desc">Valoració global de com de bé la resposta aborda la pregunta.</div>
+                </div>
+                <div class="metric-value">{{ qualitat|default(0) }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Estabilitat emocional</div>
+                    <div class="metric-desc">Consistència de les expressions facials durant la resposta.</div>
+                </div>
+                <div class="metric-value">{{ emocional }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Alineació amb la pregunta</div>
+                    <div class="metric-desc">Similitud semàntica entre la resposta i la pregunta formulada.</div>
+                </div>
+                <div class="metric-value">{{ alineacio_pregunta|default(0) }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Coherència del discurs</div>
+                    <div class="metric-desc">Connexió lògica i fil conductor entre frases consecutives.</div>
+                </div>
+                <div class="metric-value">{{ coherencia_discurs|default(0) }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Densitat informativa</div>
+                    <div class="metric-desc">Proporció de paraules amb contingut significatiu.</div>
+                </div>
+                <div class="metric-value">{{ densitat_informativa|default(0) }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Índex d'especificitat</div>
+                    <div class="metric-desc">Grau de concreció i detall de la resposta.</div>
+                </div>
+                <div class="metric-value">{{ especificitat|default(0) }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Paraules per minut</div>
+                    <div class="metric-desc">Ritme de comunicació. Ideal: 120-170 wpm.</div>
+                </div>
+                <div class="metric-value">{{ wpm }} wpm</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Temps de parla</div>
+                    <div class="metric-desc">Percentatge del temps dedicat a parlar activament.</div>
+                </div>
+                <div class="metric-value">{{ temps_parla }}%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon-box"></div>
+                <div class="metric-info">
+                    <div class="metric-name">Emoció predominant</div>
+                    <div class="metric-desc">Expressió facial més freqüent durant la resposta.</div>
+                </div>
+                <div class="metric-value">{{ emocio_predominant }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        Entrevista't · Informe generat automàticament · {{ data }}
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         ANNEX — Glossari Detallat de Mètriques
+         ══════════════════════════════════════════════════════════════════ -->
+    <div class="annex-page">
+        <div class="annex-title">Glossari Detallat de Mètriques</div>
+        <p class="annex-subtitle">
+            A continuació trobaràs una explicació completa de cadascun dels indicadors avaluats durant la teva simulació d'entrevista. Cada mètrica inclou la seva definició, com es calcula, què significa la teva puntuació i consells per millorar.
         </p>
 
+        <!-- 1. Puntuació global -->
         <div class="annex-item">
-            <div class="annex-title">Puntuació global</div>
-            <p class="annex-desc">Valoració general de la teva intervenció (de 0 a 100).</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Puntuació Global</div>
+                <span class="annex-score-badge {% if score|float >= 75 %}badge-good{% elif score|float >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ score }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La valoració general de la teva intervenció en una escala de 0 a 100. Representa el rendiment global combinant totes les dimensions avaluades.<br>
+                <strong>Com es calcula:</strong> Mitjana aritmètica de les 7 mètriques principals: contingut, fluïdesa, estructura, seguretat, riquesa lèxica, qualitat de la resposta i estabilitat emocional.<br>
+                <strong>Interpretació:</strong> ≥75% = Molt bon rendiment, estàs preparat/da. 50-74% = Rendiment acceptable amb marge de millora. &lt;50% = Cal treballar diversos aspectes.
+            </p>
+            <div class="annex-tip">Consell: Practica respostes completes que cobreixin tots els angles de la pregunta per maximitzar la puntuació global.</div>
         </div>
 
+        <!-- 2. Contingut -->
         <div class="annex-item">
-            <div class="annex-title">Contingut</div>
-            <p class="annex-desc">Mitjana d'alineació amb la pregunta, densitat informativa i especificitat.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Contingut</div>
+                <span class="annex-score-badge {% if contingut|float >= 75 %}badge-good{% elif contingut|float >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ contingut }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La rellevància i profunditat del contingut de la teva resposta respecte a la pregunta formulada.<br>
+                <strong>Com es calcula:</strong> Mitjana de tres sub-mètriques: alineació amb la pregunta (similitud semàntica entre resposta i pregunta), densitat informativa (proporció de paraules amb contingut rellevant) i índex d'especificitat (grau de concreció i detall).<br>
+                <strong>Interpretació:</strong> Un valor alt indica que has abordat la pregunta directament, has donat informació concreta i rellevant, i has evitat divagar en generalitats. Un valor baix pot significar que t'has desviat del tema o has estat massa vague/a.
+            </p>
+            <div class="annex-tip">Consell: Estructura la resposta amb exemples concrets i dades específiques. Comença responent directament la pregunta i després expandeix amb detalls.</div>
         </div>
 
+        <!-- 3. Fluïdesa -->
         <div class="annex-item">
-            <div class="annex-title">Fluïdesa</div>
-            <p class="annex-desc">Combinació del ritme de parla (paraules/minut) i la proporció de temps parlant.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Fluïdesa</div>
+                <span class="annex-score-badge {% if fluidesa|float >= 75 %}badge-good{% elif fluidesa|float >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ fluidesa }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La naturalitat i continuïtat del teu discurs oral, combinant velocitat i aprofitament del temps disponible.<br>
+                <strong>Com es calcula:</strong> Combinació ponderada (50/50) del ritme de comunicació (paraules per minut normalitzades al rang ideal de 120-170 wpm) i la proporció de temps parlant activament respecte al temps total.<br>
+                <strong>Interpretació:</strong> Un valor alt indica un ritme natural sense pauses excessives ni acceleracions. Un valor baix pot indicar massa silencis, un ritme massa ràpid (>170 wpm) o massa lent (&lt;120 wpm).
+            </p>
+            <div class="annex-tip">Consell: Practica parlant a un ritme constant d'unes 140-150 paraules per minut. Grava't i escolta les pauses innecessàries per reduir-les.</div>
         </div>
 
+        <!-- 4. Estructura -->
         <div class="annex-item">
-            <div class="annex-title">Estructura</div>
-            <p class="annex-desc">Coherència global del discurs: connexió lògica entre les idees exposades.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Estructura</div>
+                <span class="annex-score-badge {% if estructura|float >= 75 %}badge-good{% elif estructura|float >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ estructura }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La coherència i organització lògica del teu discurs — com de bé connectes les idees entre si.<br>
+                <strong>Com es calcula:</strong> Anàlisi de coherència global del discurs mitjançant similitud semàntica entre frases consecutives (SentenceTransformer). Avalua si les idees s'encadenen de forma lògica i natural.<br>
+                <strong>Interpretació:</strong> Un valor alt significa que el teu discurs segueix un fil conductor clar i les transicions entre idees són naturals. Un valor baix indica salts temàtics bruscos o falta d'estructura.
+            </p>
+            <div class="annex-tip">Consell: Utilitza l'estructura STAR (Situació, Tasca, Acció, Resultat) per organitzar les respostes. Fes servir connectors discursius: "en primer lloc", "a més", "finalment".</div>
         </div>
 
+        <!-- 5. Seguretat -->
         <div class="annex-item">
-            <div class="annex-title">Seguretat</div>
-            <p class="annex-desc">Índex de confiança basat en el to de veu i la fermesa en la comunicació.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Seguretat</div>
+                <span class="annex-score-badge {% if seguretat|float >= 75 %}badge-good{% elif seguretat|float >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ seguretat }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> L'índex de confiança i fermesa que transmets durant la teva comunicació, basat en patrons de veu i llenguatge.<br>
+                <strong>Com es calcula:</strong> Anàlisi del senyal d'àudio per detectar indicadors de confiança: estabilitat del to, absència de paraules de farciment ("eh", "mmm", "o sigui"), fermesa en l'entonació i absència d'hesitacions prolongades.<br>
+                <strong>Interpretació:</strong> Un valor alt indica que comuniques amb autoritat i convicció. Un valor baix pot reflectir inseguretat, excés de paraules de farciment o to dubitatiu.
+            </p>
+            <div class="annex-tip">Consell: Evita paraules de farciment practicant pauses curtes i conscients. Un silenci breu transmet més seguretat que un "ehhh" perllongat.</div>
         </div>
 
+        <!-- 6. Riquesa lèxica -->
         <div class="annex-item">
-            <div class="annex-title">Riquesa lèxica</div>
-            <p class="annex-desc">Varietat i riquesa del vocabulari emprat en la resposta.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Riquesa Lèxica</div>
+                <span class="annex-score-badge {% if lexic|float >= 75 %}badge-good{% elif lexic|float >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ lexic }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La varietat, precisió i sofisticació del vocabulari emprat en la teva resposta.<br>
+                <strong>Com es calcula:</strong> Ràtio type-token (paraules úniques / paraules totals) combinat amb anàlisi de diversitat lèxica, avaluant si fas servir vocabulari variat i precís en lloc de repetir sempre els mateixos termes.<br>
+                <strong>Interpretació:</strong> Un valor alt indica un vocabulari ric i divers, amb termes precisos i variats. Un valor baix suggereix repetició excessiva de paraules o vocabulari limitat.
+            </p>
+            <div class="annex-tip">Consell: Amplia el teu vocabulari professional llegint articles del teu sector. Practica substituir paraules genèriques per termes més específics i tècnics.</div>
         </div>
 
+        <!-- 7. Qualitat de la resposta -->
         <div class="annex-item">
-            <div class="annex-title">Qualitat de la resposta</div>
-            <p class="annex-desc">Valoració global de com de bé la resposta aborda la pregunta formulada.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Qualitat de la Resposta</div>
+                {% set q = qualitat|default(0)|float %}
+                <span class="annex-score-badge {% if q >= 75 %}badge-good{% elif q >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ qualitat|default(0) }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> Valoració holística de la qualitat de la resposta generada per un model de llenguatge (LLM) que actua com a avaluador expert.<br>
+                <strong>Com es calcula:</strong> Un model d'IA avançat avalua la resposta globalment considerant: pertinença, completesa, claredat, professionalitat i capacitat de convèncer. Puntua de 0 a 1.<br>
+                <strong>Interpretació:</strong> Un valor alt significa que un entrevistador expert quedaria satisfet amb la resposta. Un valor baix indica que la resposta manca d'elements clau o no resulta convincent.
+            </p>
+            <div class="annex-tip">Consell: Respon com si parlessis amb un entrevistador real: sigues professional, concís/a i demostra el teu valor afegit amb exemples tangibles.</div>
         </div>
 
+        <!-- 8. Estabilitat emocional -->
         <div class="annex-item">
-            <div class="annex-title">Estabilitat emocional</div>
-            <p class="annex-desc">Consistència de les expressions facials durant la resposta.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Estabilitat Emocional</div>
+                <span class="annex-score-badge {% if emocional|float >= 75 %}badge-good{% elif emocional|float >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ emocional }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La consistència i estabilitat de les teves expressions facials durant la resposta, indicant control emocional.<br>
+                <strong>Com es calcula:</strong> Anàlisi frame-a-frame del vídeo amb DeepFace per detectar emocions facials. Es mesura la uniformitat de la distribució emocional — una estabilitat alta indica que mantens una expressió coherent sense fluctuacions brusques.<br>
+                <strong>Interpretació:</strong> Un valor alt indica calma i control: transmets seguretat no verbal. Un valor baix pot indicar nerviosisme visible, canvis bruscos d'expressió o tensió facial perceptible.
+            </p>
+            <div class="annex-tip">Consell: Practica davant un mirall o amb la càmera. Respira profundament abans de començar. Una lleugera expressió positiva i relaxada transmet professionalitat.</div>
         </div>
 
+        <!-- 9. Alineació amb la pregunta -->
         <div class="annex-item">
-            <div class="annex-title">Paraules per minut</div>
-            <p class="annex-desc">Ritme de comunicació. El rang ideal és entre 120 i 170 paraules per minut.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Alineació amb la Pregunta</div>
+                {% set ap = alineacio_pregunta|default(0)|float %}
+                <span class="annex-score-badge {% if ap >= 75 %}badge-good{% elif ap >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ alineacio_pregunta|default(0) }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> El grau de relació semàntica directa entre la teva resposta i la pregunta formulada per l'entrevistador.<br>
+                <strong>Com es calcula:</strong> Similitud cosinus entre els embeddings (representacions vectorials) de la pregunta i la resposta generats per un model SentenceTransformer. Mesura fins a quin punt el contingut de la resposta és semànticament rellevant per a la pregunta.<br>
+                <strong>Interpretació:</strong> Un valor &gt;0.7 = resposta molt alineada. 0.4-0.7 = rellevant però podria ser més directa. &lt;0.4 = la resposta s'ha desviat significativament del tema.
+            </p>
+            <div class="annex-tip">Consell: Reformula breument la pregunta al començament de la resposta per assegurar-te que estàs al tema. Ex: "Pel que fa als meus reptes professionals..."</div>
         </div>
 
+        <!-- 10. Coherència del discurs -->
         <div class="annex-item">
-            <div class="annex-title">Temps de parla</div>
-            <p class="annex-desc">Percentatge del temps total que s'ha dedicat a parlar activament.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Coherència del Discurs</div>
+                {% set cd = coherencia_discurs|default(0)|float %}
+                <span class="annex-score-badge {% if cd >= 75 %}badge-good{% elif cd >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ coherencia_discurs|default(0) }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La connexió lògica i el fil conductor entre les frases consecutives del teu discurs.<br>
+                <strong>Com es calcula:</strong> Mitjana de similituds semàntiques entre cada parell de frases consecutives. Si les frases es connecten temàticament (alta similitud cosinus entre veïnes), el discurs és coherent.<br>
+                <strong>Interpretació:</strong> Un valor alt indica un discurs fluid on cada idea connecta amb l'anterior. Un valor baix revela salts temàtics bruscos, incoherències o digressions que confonen l'oient.
+            </p>
+            <div class="annex-tip">Consell: Pensa en la teva resposta com una cadena: cada nova idea hauria de connectar amb l'anterior. Usa transicions explícites per canviar de tema.</div>
         </div>
 
+        <!-- 11. Densitat informativa -->
         <div class="annex-item">
-            <div class="annex-title">Emoció predominant</div>
-            <p class="annex-desc">L'expressió facial detectada amb més freqüència durant la resposta.</p>
+            <div class="annex-item-header">
+                <div class="annex-item-title">Densitat Informativa</div>
+                {% set di = densitat_informativa|default(0)|float %}
+                <span class="annex-score-badge {% if di >= 75 %}badge-good{% elif di >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ densitat_informativa|default(0) }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> La proporció de paraules amb contingut significatiu respecte al total de paraules de la teva resposta.<br>
+                <strong>Com es calcula:</strong> Ràtio entre paraules de contingut (substantius, verbs principals, adjectius descriptius) i el total de paraules, excloent paraules funcionals (articles, preposicions, conjuncions). Analitzat amb spaCy per classificar cada token.<br>
+                <strong>Interpretació:</strong> Un valor alt indica que cada paraula aporta informació rellevant. Un valor baix suggereix excés de "farciment verbal" — frases buides o redundants que no aporten contingut nou.
+            </p>
+            <div class="annex-tip">Consell: Elimina frases genèriques com "bé, doncs" o "la veritat és que". Cada frase hauria d'aportar una idea o dada nova.</div>
         </div>
 
+        <!-- 12. Índex d'especificitat -->
+        <div class="annex-item">
+            <div class="annex-item-header">
+                <div class="annex-item-title">Índex d'Especificitat</div>
+                {% set es = especificitat|default(0)|float %}
+                <span class="annex-score-badge {% if es >= 75 %}badge-good{% elif es >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ especificitat|default(0) }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> El grau de concreció i detall de la teva resposta, distingint entre afirmacions genèriques i exemples concrets.<br>
+                <strong>Com es calcula:</strong> Detecció d'entitats concretes (noms de tecnologies, xifres, dates, projectes específics) i indicadors de concreció vs. generalitats vagues. Un discurs amb dades, noms i exemples específics puntua més alt.<br>
+                <strong>Interpretació:</strong> Un valor alt indica respostes concretes amb exemples reals. Un valor baix suggereix respostes vagues i genèriques tipus "tinc molta experiència" sense detallar en què.
+            </p>
+            <div class="annex-tip">Consell: Substitueix "vaig treballar en un projecte important" per "vaig liderar la migració a microserveis que va reduir la latència un 40% en 3 mesos".</div>
+        </div>
+
+        <!-- 13. Paraules per minut -->
+        <div class="annex-item">
+            <div class="annex-item-header">
+                <div class="annex-item-title">Paraules per Minut (WPM)</div>
+                <span class="annex-score-badge badge-neutral">{{ wpm }} wpm</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> El ritme de comunicació oral — la velocitat a la qual parles durant l'entrevista.<br>
+                <strong>Com es calcula:</strong> Nombre total de paraules transcrites dividit pel temps actiu de parla en minuts (excloent silencis).<br>
+                <strong>Interpretació:</strong> El rang ideal per a entrevistes professionals és 120-170 WPM. &lt;120 = ritme massa lent que pot aburrir. 120-170 = ritme natural i còmode d'escoltar. &gt;170 = massa ràpid, dificulta la comprensió i pot transmetre nerviosisme.
+            </p>
+            <div class="annex-tip">Consell: Si tendeixes a parlar ràpid, practica fent pauses al final de cada idea. Si ets massa lent/a, intenta mantenir un flux continu sense silencis llargs.</div>
+        </div>
+
+        <!-- 14. Temps de parla -->
+        <div class="annex-item">
+            <div class="annex-item-header">
+                <div class="annex-item-title">Temps de Parla</div>
+                {% set tp = temps_parla|float %}
+                <span class="annex-score-badge {% if tp >= 70 and tp <= 90 %}badge-good{% elif tp >= 50 %}badge-mid{% else %}badge-low{% endif %}">{{ temps_parla }}%</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> El percentatge del temps total de la gravació que has dedicat a parlar activament (vs. silenci).<br>
+                <strong>Com es calcula:</strong> Detecció d'activitat de veu (VAD) sobre l'àudio extret. Es compara el temps amb veu activa contra la duració total de la gravació.<br>
+                <strong>Interpretació:</strong> L'ideal és entre 70-90%. &lt;70% = massa silencis o dubtes. 70-90% = bon aprofitament amb pauses naturals. &gt;90% = potser no fas prou pauses per respirar o estructurar idees.
+            </p>
+            <div class="annex-tip">Consell: No tinguis por dels silencis breus (1-2s) entre idees — són naturals. Però evita silencis de &gt;5s que transmeten inseguretat.</div>
+        </div>
+
+        <!-- 15. Emoció predominant -->
+        <div class="annex-item">
+            <div class="annex-item-header">
+                <div class="annex-item-title">Emoció Predominant</div>
+                <span class="annex-score-badge badge-neutral">{{ emocio_predominant }}</span>
+            </div>
+            <p class="annex-item-desc">
+                <strong>Què mesura:</strong> L'expressió facial detectada amb més freqüència durant tota la teva resposta.<br>
+                <strong>Com es calcula:</strong> Anàlisi de múltiples frames del vídeo amb DeepFace, classificant cada fotograma en categories emocionals (neutral, positiva/happy, sorpresa, tristesa, enuig, etc.). L'emoció amb major freqüència acumulada és la predominant.<br>
+                <strong>Interpretació:</strong> L'ideal és "neutral" o "positiva". Una expressió "neutral" transmet professionalitat i calma. "Positiva" transmet entusiasme i motivació. Emocions com "tensa" o "trista" poden indicar nerviosisme visible.
+            </p>
+            <div class="annex-tip">Consell: L'expressió ideal per a una entrevista és un to neutral-positiu: una lleugera mitja-sonrisa amb expressió relaxada. Practica davant la càmera per ajustar.</div>
+        </div>
     </div>
+
 </body>
 </html>
