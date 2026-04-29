@@ -61,14 +61,14 @@ def analyze_interview(video_path: str, question: str, language: str = "ca") -> d
             },
             "text_metrics": dict(text_metrics),  # copy before pop
         }
-        #llm_result = generate_feedback(
-        #    transcript, question, all_metrics, language=language
-        #)
-        #llm_feedback = llm_result["feedback"]
-        #answer_quality_score = llm_result["answer_quality_score"]
+        llm_result = generate_feedback(
+            transcript, question, all_metrics, language=language
+        )
+        llm_feedback = llm_result["feedback"]
+        answer_quality_score = llm_result["answer_quality_score"]
 
-        llm_feedback = "Feedback de prova: el candidat ha respost de manera clara però podria millorar el ritme de la comunicació."
-        answer_quality_score = 0.72
+        #llm_feedback = "Feedback de prova: el candidat ha respost de manera clara però podria millorar el ritme de la comunicació."
+        #answer_quality_score = 0.72
 
         return {
             "transcript": transcript,

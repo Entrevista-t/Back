@@ -89,11 +89,11 @@ def generate_feedback(
         - "answer_quality_score": Un número de 0 a 100 avaluant l'alineació de la resposta amb la pregunta (100 = resposta directa i perfecta, <50 = divaga o no respon a la pregunta).
         - "feedback": Un text de 2 o 3 paràgrafs valorant la resposta. Destaca què ha fet bé (segons la transcripció i les mètriques) i què ha de millorar. Utilitza un to empàtic i professional.
 
-        Respon exclusivament en l'idioma amb codi: '{language}' (ca = Català, es = Castellà, en = Anglès).
+        Respon exclusivament en català
         """
 
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash", # El model més ràpid i eficient
+            model_name="gemini-2.5-flash", # El model més ràpid i eficient
             system_instruction=system_prompt,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
