@@ -14,4 +14,4 @@ resend
 google-generativeai==0.8.3
 weasyprint==63.0
 Jinja2==3.1.4
-resend
+protobuf>=4.25.0,<5.0
