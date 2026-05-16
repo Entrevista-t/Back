@@ -495,4 +495,8 @@ The GitHub Actions workflow (`.github/workflows/deploy-prod.yml`) triggers on pu
 
 ## License
 
-This project is part of an academic initiative. No formal license has been declared yet. Please contact the maintainers for usage permissions.
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+
+You are free to use, modify, and distribute this software under the terms of the AGPL-3.0. Any modified version that is accessible over a network must also be made available under the same license.
+
+See the [LICENSE](LICENSE) file for the full text.
