@@ -60,19 +60,55 @@ This project is under active development as part of an academic initiative. Feat
 
 ## About the Project
 
-**Entrevista't** is an AI-powered interview practice platform. This backend receives video recordings from the Flutter frontend, runs a multi-modal AI analysis pipeline (audio DSP, Whisper transcription, spaCy/SentenceTransformer NLP, DeepFace emotion detection), and returns structured metrics. Data is persisted in PostgreSQL via SQLAlchemy.
+**Entrevista't** is an AI-powered interview practice platform. This backend receives video recordings from the Flutter frontend, runs a multi-modal AI analysis pipeline (audio DSP, Whisper transcription, spaCy/SentenceTransformer NLP, DeepFace emotion detection, Gemini LLM feedback), and returns structured metrics. Data is persisted in PostgreSQL via SQLAlchemy.
 
 API tags and docstrings are written in **Catalan (Català)**. Code, comments, and documentation are in English.
 
 ### Analysis Pipeline
 
+```mermaid
+flowchart TD
+    A[📹 Video Upload] --> B[🎵 Audio Extraction<br/>ffmpeg]
+    B --> C[🗣️ Transcription<br/>Groq cloud / faster-whisper]
+    B --> D[🎵 Audio DSP<br/>librosa]
+    A --> E[😊 Emotion Detection<br/>DeepFace + MediaPipe]
+    C --> F[📝 NLP Metrics<br/>spaCy + SentenceTransformers]
+    C --> G[🤖 LLM Feedback<br/>Gemini 2.5 Flash]
+    D --> H[📊 Unified JSON Response]
+    E --> H
+    F --> H
+    G --> H
+    H --> I[🗄️ PostgreSQL<br/>JSONB storage]
 ```
-Video upload → Audio extraction (ffmpeg)
-  → Transcription (Groq cloud → faster-whisper fallback)
-    → NLP metrics (7 dimensions)
-  → Audio DSP metrics (speech time, pauses, rhythm)
-  → Emotion detection (DeepFace + MediaPipe)
-    → Unified JSON response → PostgreSQL (JSONB)
+
+#### `/analyze` Request Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as FastAPI
+    participant FF as ffmpeg
+    participant W as Whisper
+    participant NLP as spaCy + ST
+    participant V as DeepFace
+    participant LLM as Gemini
+    participant DB as PostgreSQL
+
+    C->>API: POST /analyze (video + question)
+    API->>FF: Extract audio
+    FF-->>API: audio.wav
+    API->>W: Transcribe audio
+    W-->>API: transcript
+    par Parallel Analysis
+        API->>NLP: Analyze text (7 metrics)
+        API->>V: Analyze video (emotions)
+        API->>LLM: Generate feedback
+    end
+    NLP-->>API: text_metrics
+    V-->>API: video_metrics
+    LLM-->>API: feedback + score
+    API->>DB: Store metrics (JSONB)
+    API-->>C: JSON response
 ```
 
 ### Key Features
@@ -81,6 +117,7 @@ Video upload → Audio extraction (ffmpeg)
 - 📝 **7 NLP metrics** — question alignment, coherence, information density, specificity, lexical richness, confidence index, communication rhythm (WPM)
 - 🎵 **Audio analysis** — active speech time, pause detection, phonation ratio via librosa
 - 😊 **Emotion detection** — frame-by-frame DeepFace analysis with MediaPipe face mesh, calibrated baselines
+- 🤖 **LLM feedback** — Gemini 2.5 Flash generates personalized interview coaching feedback in Catalan
 - 🔐 **JWT authentication** — bcrypt password hashing, token-based auth (24 h expiry)
 - 🗄️ **PostgreSQL** — SQLAlchemy ORM with JSONB metrics storage
 - 📧 **Email notifications** — interview results delivered via Resend
@@ -161,18 +198,39 @@ Video upload → Audio extraction (ffmpeg)
 
 ### Database Schema
 
+```mermaid
+erDiagram
+    USUARIS {
+        int id PK
+        string nom
+        string email
+        string password
+        datetime data_creacio
+    }
+    CATEGORIES {
+        int id PK
+        string nom
+        string descripcio
+    }
+    PREGUNTES {
+        int id PK
+        int id_categoria FK
+        string text_pregunta
+    }
+    ENTREVISTES {
+        int id PK
+        int id_usuari FK
+        int id_pregunta FK
+        datetime data_hora
+        string url_video
+        string url_informe_pdf
+        string estat_proces
+        json metriques
+    }
+    USUARIS ||--o{ ENTREVISTES : "has many"
+    CATEGORIES ||--o{ PREGUNTES : "contains"
+    PREGUNTES ||--o{ ENTREVISTES : "asked in"
 ```
-Usuari (1) ──→ (N) Entrevista
-Categoria (1) ──→ (N) Pregunta
-Pregunta (1) ──→ (N) Entrevista
-```
-
-| Table | Key Columns |
-|-------|-------------|
-| `usuaris` | id, nom, email, password (bcrypt), data_creacio |
-| `categories` | id, nom, descripcio |
-| `preguntes` | id, id_categoria (FK → categories), text_pregunta |
-| `entrevistes` | id, id_usuari (FK → usuaris), id_pregunta (FK → preguntes), data_hora, url_video, url_informe_pdf, estat_proces, metriques (JSONB) |
 
 **Interview states** (`estat_proces`): `pendent` → `processant` → `completat` | `error`
 
@@ -184,6 +242,7 @@ Pregunta (1) ──→ (N) Entrevista
 | `transcription.py` | Groq cloud (whisper-large-v3) with local faster-whisper fallback | Clean transcript string (Catalan) |
 | `text.py` | spaCy + SentenceTransformer (7 metrics) | `question_alignment`, `discourse_coherence`, `information_density`, `specificity_index`, `lexical_richness`, `confidence_index`, `communication_rhythm_wpm` |
 | `video.py` | MediaPipe FaceMesh + DeepFace | `emotion_distribution`, `dominant_emotion`, `emotional_stability` |
+| `llm.py` | Gemini 2.5 Flash feedback generation | `feedback` (natural-language), `answer_quality_score` (0.0–1.0) |
 | `pipeline.py` | Orchestrator — wires all modules | Unified JSON response |
 
 #### Transcription Strategy
@@ -196,6 +255,32 @@ transcribe(audio_path)
   └─ Fallback: faster-whisper local (medium, CPU/int8, 4 threads)
                Slower (~30-60s on i5), no API key needed
                Model pre-downloaded in Docker image
+```
+
+#### Pipeline Return Value
+
+`analyze_interview()` returns a unified JSON object:
+
+```json
+{
+  "transcript": "...",
+  "audio_metrics": {
+    "duration_total": 45.2,
+    "active_speech_time": 38.1,
+    "confidence_index": 0.78,
+    "communication_rhythm_wpm": 142
+  },
+  "text_metrics": {
+    "question_alignment": 0.85,
+    "discourse_coherence": 0.72,
+    "information_density": 0.68,
+    "specificity_index": 0.74,
+    "lexical_richness": 0.61
+  },
+  "video_metrics": { "..." },
+  "feedback": "Natural-language feedback in Catalan",
+  "answer_quality_score": 0.85
+}
 ```
 
 ---
@@ -213,6 +298,7 @@ transcribe(audio_path)
 | Audio DSP | librosa + ffmpeg |
 | NLP | spaCy 3.8 (`ca_core_news_md`) + SentenceTransformers |
 | Vision | MediaPipe FaceMesh + DeepFace |
+| LLM Feedback | Google Gemini 2.5 Flash (google-generativeai SDK) |
 | Email | Resend |
 | Validation | Pydantic 2.10 |
 | Containerisation | Docker (two-layer: ML base + app) |
@@ -321,13 +407,17 @@ Back/
 │   ├── audio.py                   # ffmpeg extraction + librosa DSP metrics
 │   ├── transcription.py           # Groq cloud + faster-whisper local fallback
 │   ├── text.py                    # spaCy + SentenceTransformer NLP (7 metrics)
-│   └── video.py                   # MediaPipe FaceMesh + DeepFace emotions
+│   ├── video.py                   # MediaPipe FaceMesh + DeepFace emotions
+│   └── llm.py                     # Gemini 2.5 Flash feedback generation
 ├── infra/                         # Docker & orchestration
 │   ├── Dockerfile                 # Multi-stage: runtime & dev targets
 │   ├── Dockerfile.ml-base         # Heavy ML dependencies base image
 │   ├── docker-compose.yml         # Production compose
 │   ├── docker-compose-dev.yml     # Development with hot reload
 │   └── docker-compose.debug.yml   # Debug mode with debugpy (port 5678)
+├── pdf_generator.py               # WeasyPrint PDF report generation
+├── email_service.py               # Resend email notifications
+├── templates/                     # Jinja2 HTML templates for PDF reports
 ├── requirements.txt               # Meta-file (includes all below)
 ├── requirements-api.txt           # API framework, auth, DB, email
 ├── requirements-audio-nlp.txt     # Groq, faster-whisper, spaCy, NLP
@@ -374,6 +464,7 @@ Adding API dependencies (FastAPI, auth libs, etc.) only rebuilds the top layer. 
 | `DATABASE_URL` | ✅ | PostgreSQL connection string (`postgresql://user:pass@host:5432/db`) |
 | `JWT_SECRET_KEY` | ✅ | Secret key for JWT token signing (falls back to insecure default in dev) |
 | `GROQ_API_KEY` | ⬡ Optional | Groq API key for cloud transcription. If absent, uses local faster-whisper |
+| `GEMINI_API_KEY` | ⬡ Optional | Google Gemini API key for LLM feedback generation. If absent, returns placeholder feedback |
 
 The `.env` file is read by Docker Compose and `python-dotenv`. Copy `.env.example` and fill in your values.
 
