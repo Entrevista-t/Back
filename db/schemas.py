@@ -3,6 +3,11 @@ from datetime import datetime
 from typing import Optional
 import re 
 
+PASSWORD_CRITERIA_MESSAGE = (
+    "The password doesn't meet the criteria: It should have at least 8 "
+    "characters, one uppercase letter, one lowercase letter, and one number."
+)
+
 # ==========================================
 # 👤 USUARIS
 # ==========================================
@@ -18,11 +23,11 @@ class UsuariCreate(UsuariBase):
     @classmethod
     def validate_password_strength(cls, v: str):
         if not re.search(r'[A-Z]', v):
-            raise ValueError('Password must contain at least one uppercase letter')
+            raise ValueError(PASSWORD_CRITERIA_MESSAGE)
         if not re.search(r'[a-z]', v):
-            raise ValueError('Password must contain at least one lowercase letter')
+            raise ValueError(PASSWORD_CRITERIA_MESSAGE)
         if not re.search(r'[0-9]', v):
-            raise ValueError('Password must contain at least one digit')
+            raise ValueError(PASSWORD_CRITERIA_MESSAGE)
         return v
 
 class UsuariResponse(UsuariBase):
@@ -48,11 +53,11 @@ class UsuariUpdate(BaseModel):
         if v is None:
             return v
         if not re.search(r'[A-Z]', v):
-            raise ValueError('Password must contain at least one uppercase letter')
+            raise ValueError(PASSWORD_CRITERIA_MESSAGE)
         if not re.search(r'[a-z]', v):
-            raise ValueError('Password must contain at least one lowercase letter')
+            raise ValueError(PASSWORD_CRITERIA_MESSAGE)
         if not re.search(r'[0-9]', v):
-            raise ValueError('Password must contain at least one digit')
+            raise ValueError(PASSWORD_CRITERIA_MESSAGE)
         return v
 
 

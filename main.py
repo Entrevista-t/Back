@@ -1,15 +1,17 @@
-from fastapi import Depends, FastAPI, UploadFile, File, Form, HTTPException, status
+from fastapi import Depends, FastAPI, UploadFile, File, Form, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
-from db.database import get_db, engine, Base
+from db.database import get_db, engine, Base, SessionLocal
 from db.models import Entrevista, Usuari, Categoria, Pregunta
 from db.schemas import (
     EntrevistaCreate, EntrevistaResponse, UsuariCreate, UsuariResponse, UsuariLogin, UsuariUpdate,
     CategoriaCreate, CategoriaResponse, CategoriaUpdate,
-    PreguntaCreate, PreguntaResponse, PreguntaUpdate
+    PreguntaCreate, PreguntaResponse, PreguntaUpdate, PASSWORD_CRITERIA_MESSAGE
 )
 from interview_analyzer import analyze_interview
 from passlib.context import CryptContext
@@ -18,10 +20,7 @@ from typing import List, Optional
 import jwt
 from jwt.exceptions import InvalidTokenError
 import os
-import asyncio
-import tempfile
 import logging
-import shutil
 import uuid
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
@@ -63,7 +62,39 @@ app.add_middleware(
 # Serve uploaded profile pictures as static files
 UPLOAD_DIR = Path("uploads/profile_pictures")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+INTERVIEW_UPLOAD_DIR = Path("uploads/interviews")
+INTERVIEW_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return controlled validation errors without echoing submitted values."""
+    sanitized_errors = []
+    is_password_error = False
+
+    for error in exc.errors():
+        loc = [str(part) for part in error.get("loc", [])]
+        if "password" in loc:
+            is_password_error = True
+
+        sanitized = {
+            key: value
+            for key, value in error.items()
+            if key not in {"input", "ctx"}
+        }
+        sanitized_errors.append(sanitized)
+
+    if is_password_error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": PASSWORD_CRITERIA_MESSAGE},
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=jsonable_encoder({"detail": sanitized_errors}),
+    )
 
 def verify_password(plain_password, hashed_password):
     """Comprova si la contrasenya en text pla coincideix amb el hash de la BD."""
@@ -683,181 +714,265 @@ def list_user_interviews(
     entrevistes = db.query(Entrevista).filter(Entrevista.id_usuari == id).all()
     return entrevistes
 
-# ==========================================
-# 🎥 ENDPOINT PESAT D'ANÀLISI DE VÍDEO
-# ==========================================
 
-@app.post("/analyze", tags=["Anàlisi"])
-async def analyze(
-    background_tasks: BackgroundTasks, # 👈 NOU: Necessari per enviar el correu en segon pla
-    video: UploadFile = File(..., description="Video file of the interview answer"),
-    question: str = Form(..., description="The interviewer's question text"),
-    language: str = Form("ca", description="Language hint for transcription"),
-    id_entrevista: int = Form(..., description="L'ID de l'entrevista pendent"),
-    db: Session = Depends(get_db),
-    usuari_actual: Usuari = Depends(get_current_user),
-):
-    """
-    Analitza el vídeo del candidat, en guarda les mètriques i automàticament 
-    genera i envia l'informe PDF per correu electrònic.
-    """
-    
-    entrevista = db.query(Entrevista).filter(Entrevista.id == id_entrevista).first()
-    if not entrevista:
-        raise HTTPException(status_code=404, detail="Entrevista no trobada")
-    if entrevista.id_usuari != usuari_actual.id:
-        raise HTTPException(status_code=403, detail="No tens permís per modificar aquesta entrevista")
+def _safe_pct(val, default=0):
+    """Convert analyzer values into 0-100 integer percentages for reports."""
+    if isinstance(val, (int, float)):
+        v = float(val)
+        return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
+    if isinstance(val, str):
+        try:
+            v = float(val)
+            return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
+        except ValueError:
+            return default
+    if isinstance(val, dict):
+        for key in ["score", "global_coherence", "value"]:
+            if key in val:
+                return _safe_pct(val[key], default)
+    return default
 
-    entrevista.estat_proces = "processant"
-    db.commit()
 
-    tmp_path = None
+def _generate_and_send_report(result: dict, question: str, user_name: str, user_email: str) -> None:
+    m = result
+    audio = m.get("audio_metrics", {})
+    text_m = m.get("text_metrics", {})
+    video_m = m.get("video_metrics", {})
+
+    emocio_text = "Neutral"
+    if isinstance(video_m, dict):
+        emocio_text = str(video_m.get("dominant_emotion", "Neutral")).capitalize()
+    elif isinstance(video_m, list) and len(video_m) > 0:
+        from collections import Counter
+        emocions_text = [str(e) for e in video_m if isinstance(e, str)]
+        if emocions_text:
+            emocio_text = Counter(emocions_text).most_common(1)[0][0].capitalize()
+    elif isinstance(video_m, str):
+        emocio_text = video_m.capitalize()
+
+    durada_f = float(audio.get("duration_total", 0) or 0)
+    actiu_f = float(audio.get("active_speech_time", 0) or 0)
+    temps_parla_percent = min(100, int((actiu_f / durada_f) * 100)) if durada_f > 0 else 0
+
+    sr = min(1.0, actiu_f / durada_f) if durada_f > 0 else 0.0
+    wpm_raw = float(audio.get("communication_rhythm_wpm", 0) or 0)
+    wpm_norm = max(0.0, 1.0 - abs(wpm_raw - 145) / 145)
+    fluidesa_val = min(100, max(0, int((sr * 0.5 + wpm_norm * 0.5) * 100)))
+
+    estabilitat_raw = 0.0
+    if isinstance(video_m, dict):
+        estabilitat_raw = float(video_m.get("emotional_stability", 0) or 0)
+    emocional_val = max(0, min(100, int((1.0 - estabilitat_raw) * 100)))
+
+    raw_score_val = float(m.get("answer_quality_score", 0) or 0)
+    qualitat_val = min(100, max(0, int(raw_score_val * 100 if raw_score_val <= 1.0 else raw_score_val)))
+
+    contingut_val = _safe_pct(text_m.get("question_alignment", 0))
+    estructura_val = _safe_pct(text_m.get("discourse_coherence", 0))
+    seguretat_val = _safe_pct(audio.get("confidence_index", 0))
+    lexic_val = _safe_pct(text_m.get("lexical_richness", 0))
+
+    all_scores = sorted([s for s in [
+        contingut_val, fluidesa_val, estructura_val, seguretat_val,
+        lexic_val, qualitat_val, emocional_val
+    ] if s > 0])
+    if all_scores:
+        mid = len(all_scores) // 2
+        score_final = all_scores[mid] if len(all_scores) % 2 == 1 else (all_scores[mid - 1] + all_scores[mid]) // 2
+    else:
+        score_final = 0
+
+    dades_informe = {
+        "nom_usuari": user_name,
+        "data": datetime.now().strftime("%d/%m/%Y"),
+        "pregunta": question,
+        "transcripcio": m.get("transcript", "Sense transcripció."),
+        "score": score_final,
+        "feedback_ia": m.get("llm_feedback", "Sense feedback."),
+        "qualitat": qualitat_val,
+        "contingut": contingut_val,
+        "fluidesa": fluidesa_val,
+        "estructura": estructura_val,
+        "seguretat": seguretat_val,
+        "lexic": lexic_val,
+        "emocional": emocional_val,
+        "alineacio_pregunta": _safe_pct(text_m.get("question_alignment", 0)),
+        "coherencia_discurs": _safe_pct(text_m.get("discourse_coherence", 0)),
+        "densitat_informativa": _safe_pct(text_m.get("information_density", 0)),
+        "especificitat": _safe_pct(text_m.get("specificity_index", 0)),
+        "wpm": int(wpm_raw),
+        "temps_parla": temps_parla_percent,
+        "emocio_predominant": emocio_text,
+    }
+
+    ruta_pdf = generar_pdf_entrevista(dades_informe)
+    enviar_informe_per_correu(
+        email_desti=user_email,
+        nom_usuari=user_name,
+        ruta_pdf=ruta_pdf,
+    )
+
+
+def _process_interview_background(
+    interview_id: int,
+    video_path: str,
+    question: str,
+    language: str,
+    user_email: str,
+    user_name: str,
+) -> None:
+    db = SessionLocal()
     try:
-        suffix = os.path.splitext(video.filename or ".mp4")[1].lower()
-        if suffix not in ALLOWED_VIDEO_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="Format de vídeo no suportat")
-        
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp_path = tmp.name
-            total = 0
-            while chunk := await video.read(1024 * 1024):
-                total += len(chunk)
-                if total > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail="L'arxiu és massa gran")
-                tmp.write(chunk)
+        result = analyze_interview(video_path, question, language)
 
-        # 3. Executem TOTA la IA
-        result = await asyncio.to_thread(analyze_interview, tmp_path, question, language)
+        entrevista = db.query(Entrevista).filter(Entrevista.id == interview_id).first()
+        if not entrevista:
+            logger.error("Interview %s disappeared before analysis completed", interview_id)
+            return
 
-        # 4. Guardem a la BD
         entrevista.metriques = result
         entrevista.estat_proces = "completat"
         db.commit()
 
-        # 🚀 5. INICI: GENERACIÓ I ENVIAMENT AUTOMÀTIC DEL PDF 🚀
         try:
-            m = result
-            audio = m.get("audio_metrics", {})
-            text_m = m.get("text_metrics", {})
-            video_m = m.get("video_metrics", {})
-
-            # Helper: convert 0-1 float (or dict with known sub-key) to 0-100 int
-            def safe_pct(val, default=0):
-                if isinstance(val, (int, float)):
-                    v = float(val)
-                    return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
-                if isinstance(val, str):
-                    try:
-                        v = float(val)
-                        return min(100, max(0, int(v * 100 if v <= 1.0 else v)))
-                    except ValueError:
-                        return default
-                if isinstance(val, dict):
-                    for key in ["score", "global_coherence", "value"]:
-                        if key in val:
-                            return safe_pct(val[key], default)
-                return default
-
-            # Emotion label from video
-            emocio_text = "Neutral"
-            if isinstance(video_m, dict):
-                emocio_text = str(video_m.get("dominant_emotion", "Neutral")).capitalize()
-            elif isinstance(video_m, list) and len(video_m) > 0:
-                from collections import Counter
-                emocions_text = [str(e) for e in video_m if isinstance(e, str)]
-                if emocions_text: emocio_text = Counter(emocions_text).most_common(1)[0][0].capitalize()
-            elif isinstance(video_m, str):
-                emocio_text = video_m.capitalize()
-
-            # Temps de parla
-            durada_f = float(audio.get("duration_total", 0) or 0)
-            actiu_f = float(audio.get("active_speech_time", 0) or 0)
-            temps_parla_percent = min(100, int((actiu_f / durada_f) * 100)) if durada_f > 0 else 0
-
-            # Fluïdesa (mirrors frontend formula: speech_ratio * 0.5 + wpm_norm * 0.5)
-            sr = min(1.0, actiu_f / durada_f) if durada_f > 0 else 0.0
-            wpm_raw = float(audio.get("communication_rhythm_wpm", 0) or 0)
-            wpm_norm = max(0.0, 1.0 - abs(wpm_raw - 145) / 145)
-            fluidesa_val = min(100, max(0, int((sr * 0.5 + wpm_norm * 0.5) * 100)))
-
-            # Estabilitat emocional (std dev inverted: low std = high stability)
-            estabilitat_raw = 0.0
-            if isinstance(video_m, dict):
-                estabilitat_raw = float(video_m.get("emotional_stability", 0) or 0)
-            emocional_val = max(0, min(100, int((1.0 - estabilitat_raw) * 100)))
-
-            # Answer quality score (0-1 float from LLM)
-            raw_score_val = float(m.get("answer_quality_score", 0) or 0)
-            qualitat_val = min(100, max(0, int(raw_score_val * 100 if raw_score_val <= 1.0 else raw_score_val)))
-
-            # Compute individual metrics for mapping
-            contingut_val = safe_pct(text_m.get("question_alignment", 0))
-            estructura_val = safe_pct(text_m.get("discourse_coherence", 0))
-            seguretat_val = safe_pct(audio.get("confidence_index", 0))
-            lexic_val = safe_pct(text_m.get("lexical_richness", 0))
-
-            # Puntuació global = median of all 7 metrics (mirrors frontend)
-            all_scores = sorted([s for s in [
-                contingut_val, fluidesa_val, estructura_val, seguretat_val,
-                lexic_val, qualitat_val, emocional_val
-            ] if s > 0])
-            if all_scores:
-                mid = len(all_scores) // 2
-                score_final = all_scores[mid] if len(all_scores) % 2 == 1 else (all_scores[mid - 1] + all_scores[mid]) // 2
-            else:
-                score_final = 0
-
-            # Mapeig amb claus correctes del pipeline
-            dades_informe = {
-                "nom_usuari": usuari_actual.nom,
-                "data": datetime.now().strftime("%d/%m/%Y"),
-                "pregunta": question,
-                "transcripcio": m.get("transcript", "Sense transcripció."),
-                "score": score_final,
-                "feedback_ia": m.get("llm_feedback", "Sense feedback."),
-                "qualitat": qualitat_val,
-                "contingut": contingut_val,
-                "fluidesa": fluidesa_val,
-                "estructura": estructura_val,
-                "seguretat": seguretat_val,
-                "lexic": lexic_val,
-                "emocional": emocional_val,
-                "alineacio_pregunta": safe_pct(text_m.get("question_alignment", 0)),
-                "coherencia_discurs": safe_pct(text_m.get("discourse_coherence", 0)),
-                "densitat_informativa": safe_pct(text_m.get("information_density", 0)),
-                "especificitat": safe_pct(text_m.get("specificity_index", 0)),
-                "wpm": int(wpm_raw),
-                "temps_parla": temps_parla_percent,
-                "emocio_predominant": emocio_text
-            }
-
-            ruta_pdf = generar_pdf_entrevista(dades_informe)
-            background_tasks.add_task(enviar_informe_per_correu, email_desti=usuari_actual.email, nom_usuari=usuari_actual.nom, ruta_pdf=ruta_pdf)
-            logger.info("PDF generat i programat per enviament automàtic.")
+            _generate_and_send_report(result, question, user_name, user_email)
+            logger.info("PDF generated and sent for interview %s.", interview_id)
         except Exception as e:
-            logger.error(f"Error generant PDF automàtic: {e}")
-            # No aturem el procés, l'anàlisi ja està guardat amb èxit.
-        # 🚀 FI: CODI AUTOMÀTIC 🚀
+            logger.error("Error generating or sending PDF for interview %s: %s", interview_id, e, exc_info=True)
 
-        return JSONResponse(content={
-            "message": "Anàlisi completat correctament i informe enviat per correu.",
-            "id_entrevista": entrevista.id,
-            "estat": entrevista.estat_proces,
-            "metriques": result
-        })
+    except Exception as e:
+        logger.error("Background analysis failed for interview %s: %s", interview_id, e, exc_info=True)
+        db.rollback()
+        try:
+            entrevista = db.query(Entrevista).filter(Entrevista.id == interview_id).first()
+            if entrevista:
+                entrevista.estat_proces = "error"
+                db.commit()
+        except Exception:
+            db.rollback()
+            logger.error("Could not mark interview %s as error", interview_id, exc_info=True)
+    finally:
+        db.close()
 
+
+# ==========================================
+# 🎥 ENDPOINT PESAT D'ANÀLISI DE VÍDEO
+# ==========================================
+
+@app.post("/analyze", status_code=status.HTTP_202_ACCEPTED, tags=["Anàlisi"])
+async def analyze(
+    background_tasks: BackgroundTasks,
+    video: UploadFile = File(..., description="Video file of the interview answer"),
+    question: str = Form(..., description="The interviewer's question text"),
+    language: str = Form("ca", description="Language hint for transcription"),
+    id_entrevista: Optional[int] = Form(None, description="L'ID de l'entrevista pendent"),
+    id_pregunta: Optional[int] = Form(None, description="L'ID de la pregunta, si l'entrevista encara no existeix"),
+    db: Session = Depends(get_db),
+    usuari_actual: Usuari = Depends(get_current_user),
+):
+    """
+    Rep el vídeo, marca l'entrevista com a processant i executa l'anàlisi en segon pla.
+    """
+    if id_entrevista is None and id_pregunta is None:
+        raise HTTPException(status_code=400, detail="Cal indicar id_entrevista o id_pregunta")
+
+    entrevista = None
+    if id_entrevista is not None:
+        entrevista = db.query(Entrevista).filter(Entrevista.id == id_entrevista).first()
+        if not entrevista:
+            raise HTTPException(status_code=404, detail="Entrevista no trobada")
+        if entrevista.id_usuari != usuari_actual.id:
+            raise HTTPException(status_code=403, detail="No tens permís per modificar aquesta entrevista")
+    elif id_pregunta is not None:
+        pregunta = db.query(Pregunta).filter(Pregunta.id == id_pregunta).first()
+        if not pregunta:
+            raise HTTPException(status_code=404, detail="La pregunta especificada no existeix.")
+
+    suffix = os.path.splitext(video.filename or "")[1].lower()
+    if suffix not in ALLOWED_VIDEO_EXTENSIONS:
+        if entrevista is not None:
+            entrevista.estat_proces = "error"
+            db.commit()
+        raise HTTPException(status_code=400, detail="Format de vídeo no suportat")
+
+    filename = f"{uuid.uuid4().hex}{suffix}"
+    stored_path = INTERVIEW_UPLOAD_DIR / filename
+    total = 0
+
+    try:
+        with stored_path.open("wb") as out:
+            while chunk := await video.read(1024 * 1024):
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="L'arxiu és massa gran")
+                out.write(chunk)
     except HTTPException:
+        if stored_path.exists():
+            try:
+                stored_path.unlink()
+            except OSError:
+                pass
+        if entrevista is not None:
+            entrevista.estat_proces = "error"
+            db.commit()
         raise
     except Exception as e:
-        logger.error("Analysis endpoint error: %s", e)
-        entrevista.estat_proces = "error"
-        db.commit()
-        raise HTTPException(status_code=500, detail="L'anàlisi del vídeo ha fallat.")
+        if stored_path.exists():
+            try:
+                stored_path.unlink()
+            except OSError:
+                pass
+        logger.error("Video upload failed: %s", e, exc_info=True)
+        if entrevista is not None:
+            entrevista.estat_proces = "error"
+            db.commit()
+        raise HTTPException(status_code=500, detail="No s'ha pogut rebre el vídeo.")
 
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try: os.remove(tmp_path)
-            except OSError: pass
+    if total == 0:
+        if stored_path.exists():
+            try:
+                stored_path.unlink()
+            except OSError:
+                pass
+        if entrevista is not None:
+            entrevista.estat_proces = "error"
+            db.commit()
+        raise HTTPException(status_code=400, detail="El vídeo està buit")
+
+    if entrevista is None:
+        entrevista = Entrevista(
+            id_usuari=usuari_actual.id,
+            id_pregunta=id_pregunta,
+            url_video=f"/uploads/interviews/{filename}",
+            estat_proces="processant",
+        )
+        db.add(entrevista)
+    else:
+        entrevista.url_video = f"/uploads/interviews/{filename}"
+        entrevista.metriques = None
+        entrevista.estat_proces = "processant"
+
+    db.commit()
+    db.refresh(entrevista)
+
+    background_tasks.add_task(
+        _process_interview_background,
+        entrevista.id,
+        str(stored_path),
+        question,
+        language,
+        usuari_actual.email,
+        usuari_actual.nom,
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={
+            "message": "Video received and queued for analysis.",
+            "id_entrevista": entrevista.id,
+            "estat_proces": entrevista.estat_proces,
+        },
+    )
 
 # ==========================================
 # GENERADOR PDF I PROVES

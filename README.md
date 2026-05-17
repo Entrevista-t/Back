@@ -94,8 +94,10 @@ sequenceDiagram
     participant LLM as Gemini
     participant DB as PostgreSQL
 
-    C->>API: POST /analyze (video + question)
-    API->>FF: Extract audio
+    C->>API: POST /analyze (video + question + id_pregunta/id_entrevista)
+    API->>DB: Store video metadata + status processant
+    API-->>C: 202 Accepted (id_entrevista)
+    API->>FF: Extract audio in background
     FF-->>API: audio.wav
     API->>W: Transcribe audio
     W-->>API: transcript
@@ -108,7 +110,7 @@ sequenceDiagram
     V-->>API: video_metrics
     LLM-->>API: feedback + score
     API->>DB: Store metrics (JSONB)
-    API-->>C: JSON response
+    API->>DB: Mark completat or error
 ```
 
 ### Key Features
@@ -185,9 +187,9 @@ sequenceDiagram
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/analyze` | 🔒 JWT | Upload video + run full AI analysis pipeline |
+| POST | `/analyze` | 🔒 JWT | Upload video, mark interview as processing, queue AI analysis |
 
-> **`/analyze`** accepts `multipart/form-data` with fields: `video` (file), `question` (text), `language` (default: `ca`), `id_entrevista` (int). Max upload: 500 MB. Allowed formats: `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`, `.m4v`, `.wmv`.
+> **`/analyze`** accepts `multipart/form-data` with fields: `video` (file), `question` (text), `language` (default: `ca`), and either `id_pregunta` (create-on-upload) or `id_entrevista` (existing pending interview). It returns `202 Accepted` after the video is stored and the interview is marked `processant`; full analysis continues in the background. Max upload: 500 MB. Allowed formats: `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`, `.m4v`, `.wmv`.
 
 #### ⚙️ System
 
