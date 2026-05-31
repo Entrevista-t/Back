@@ -66,20 +66,9 @@ API tags and docstrings are written in **Catalan (Català)**. Code, comments, an
 
 ### Analysis Pipeline
 
-```mermaid
-flowchart TD
-    A[📹 Video Upload] --> B[🎵 Audio Extraction<br/>ffmpeg]
-    B --> C[🗣️ Transcription<br/>Groq cloud / faster-whisper]
-    B --> D[🎵 Audio DSP<br/>librosa]
-    A --> E[😊 Emotion Detection<br/>DeepFace + MediaPipe]
-    C --> F[📝 NLP Metrics<br/>spaCy + SentenceTransformers]
-    C --> G[🤖 LLM Feedback<br/>Gemini 2.5 Flash]
-    D --> H[📊 Unified JSON Response]
-    E --> H
-    F --> H
-    G --> H
-    H --> I[🗄️ PostgreSQL<br/>JSONB storage]
-```
+<div align="center">
+  <img src=".github/diagrams/analysis-pipeline.png" alt="Analysis Pipeline" width="100%" />
+</div>
 
 #### `/analyze` Request Lifecycle
 
@@ -237,6 +226,10 @@ erDiagram
 **Interview states** (`estat_proces`): `pendent` → `processant` → `completat` | `error`
 
 ### Analysis Modules
+
+<div align="center">
+  <img src=".github/diagrams/models-and-tech.png" alt="AI/ML Models Stack" width="100%" />
+</div>
 
 | Module | Purpose | Key Output |
 |--------|---------|------------|
@@ -473,6 +466,10 @@ The `.env` file is read by Docker Compose and `python-dotenv`. Copy `.env.exampl
 ---
 
 ## CI/CD
+
+<div align="center">
+  <img src=".github/diagrams/ci-cd-pipeline.png" alt="CI/CD Pipeline" width="100%" />
+</div>
 
 The GitHub Actions workflow (`.github/workflows/deploy-prod.yml`) triggers on pushes to `main`:
 

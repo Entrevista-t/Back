@@ -1,0 +1,180 @@
+<mxfile host="app.diagrams.net" modified="2025-01-01T00:00:00.000Z" agent="draw.io" version="21.0.0">
+  <diagram name="Stack de Models IA / ML" id="models-tech">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Stack de Models IA / ML" style="text;html=1;align=center;verticalAlign=middle;fontSize=28;fontStyle=1;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="500" y="20" width="500" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Tots els models són preentrenats — sense fine-tuning personalitzat. Lògica de calibratge adaptatiu per a detecció emocional." style="text;html=1;align=center;verticalAlign=middle;fontSize=14;fontColor=#616161;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="280" y="65" width="900" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Row 1: Speech & Transcription -->
+        <mxCell id="section1" value="Parla i Transcripció" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#C62828;" vertex="1" parent="1">
+          <mxGeometry x="100" y="110" width="300" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Card: Whisper Large V3 -->
+        <mxCell id="card-whisper" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#C62828;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="100" y="150" width="330" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="whisper-title" value="🗣️ Whisper Large V3" style="text;html=1;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#B71C1C;" vertex="1" parent="1">
+          <mxGeometry x="120" y="155" width="280" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="whisper-provider" value="Proveïdor: Groq Cloud API" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="185" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="whisper-role" value="Funció: Transcripció de veu a text" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="207" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="whisper-lang" value="Idioma: Català (ca)" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="229" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="whisper-note" value="⚡ Principal — inferència al núvol" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#C62828;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="120" y="253" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Card: faster-whisper -->
+        <mxCell id="card-fwhisper" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#AD1457;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="470" y="150" width="330" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="fwhisper-title" value="🔄 faster-whisper (medium)" style="text;html=1;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#880E4F;" vertex="1" parent="1">
+          <mxGeometry x="490" y="155" width="290" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fwhisper-provider" value="Proveïdor: Local (CTranslate2)" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="490" y="185" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="fwhisper-role" value="Funció: Transcripció de reserva" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="490" y="207" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="fwhisper-quant" value="Quantització: int8 (optimitzat CPU)" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="490" y="229" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="fwhisper-note" value="🛡️ Fallback — funciona offline amb CPU" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#AD1457;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="490" y="253" width="290" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Row 2: NLP & Text -->
+        <mxCell id="section2" value="NLP i Comprensió de Text" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#4A148C;" vertex="1" parent="1">
+          <mxGeometry x="100" y="310" width="300" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Card: spaCy -->
+        <mxCell id="card-spacy" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE7F6;strokeColor=#6A1B9A;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="100" y="350" width="330" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="spacy-title" value="📝 spaCy ca_core_news_md" style="text;html=1;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#4A148C;" vertex="1" parent="1">
+          <mxGeometry x="120" y="355" width="300" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="spacy-role" value="Funció: Pipeline NLP en català" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="385" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="spacy-tasks" value="Tasques: Etiquetatge POS, segmentació&#xa;de frases, tokenització, entitats" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="407" width="300" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="spacy-metrics" value="→ densitat_info, especificitat, riquesa_lèxica" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#6A1B9A;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="120" y="450" width="300" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Card: SentenceTransformer -->
+        <mxCell id="card-st" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#7B1FA2;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="470" y="350" width="330" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="st-title" value="🧠 SentenceTransformer" style="text;html=1;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#4A148C;" vertex="1" parent="1">
+          <mxGeometry x="490" y="355" width="280" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="st-model" value="Model: paraphrase-multilingual&#xa;-MiniLM-L12-v2" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="490" y="385" width="280" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="st-role" value="Funció: Embeddings semàntics (384-dim)" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="490" y="420" width="300" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="st-metrics" value="→ alineació_pregunta, coherència_discursiva" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#7B1FA2;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="490" y="450" width="300" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Row 3: Computer Vision -->
+        <mxCell id="section3" value="Visió per Computador i Emocions" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#E65100;" vertex="1" parent="1">
+          <mxGeometry x="100" y="510" width="350" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Card: MediaPipe -->
+        <mxCell id="card-mp" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="100" y="550" width="330" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="mp-title" value="👁️ MediaPipe FaceMesh" style="text;html=1;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#BF360C;" vertex="1" parent="1">
+          <mxGeometry x="120" y="555" width="280" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="mp-role" value="Funció: Detecció facial i seguiment" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="585" width="300" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="mp-detail" value="468 punts 3D, seguiment en temps real" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="607" width="300" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="mp-note" value="Bounding box + suavitzat per retalls estables" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#E65100;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="120" y="635" width="300" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Card: DeepFace -->
+        <mxCell id="card-df" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FBE9E7;strokeColor=#BF360C;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="470" y="550" width="330" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="df-title" value="🎭 DeepFace (VGG-Face)" style="text;html=1;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#BF360C;" vertex="1" parent="1">
+          <mxGeometry x="490" y="555" width="290" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="df-role" value="Funció: Classificació emocional (7 classes)" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="490" y="585" width="300" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="df-classes" value="enuig · fàstic · por · alegria · tristesa&#xa;sorpresa · neutre" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="490" y="607" width="300" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="df-custom" value="⚙️ Personalitzat: línia base adaptativa&#xa;de 40 frames + llindars relatius per subjecte" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#BF360C;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="490" y="645" width="300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Row 4: LLM -->
+        <mxCell id="section4" value="Feedback LLM" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#1B5E20;" vertex="1" parent="1">
+          <mxGeometry x="100" y="710" width="200" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Card: Gemini -->
+        <mxCell id="card-gemini" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#1B5E20;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="100" y="750" width="700" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="gemini-title" value="💬 Google Gemini 2.5 Flash" style="text;html=1;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#1B5E20;" vertex="1" parent="1">
+          <mxGeometry x="120" y="755" width="350" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="gemini-role" value="Funció: Generar feedback de coaching en llenguatge natural + puntuació de qualitat de resposta (0–1)" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="785" width="650" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="gemini-input" value="Entrada: transcripció + pregunta + mètriques → Sortida: feedback personalitzat en català" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="120" y="807" width="650" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="gemini-note" value="Mode JSON (sortida estructurada) · Temperatura 0.7 · Prompt de sistema de coach de RRHH" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#1B5E20;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="120" y="830" width="600" height="18" as="geometry" />
+        </mxCell>
+
+        <!-- Legend box -->
+        <mxCell id="legend" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#BDBDBD;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="870" y="120" width="350" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" value="Llegenda:" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontStyle=1;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="885" y="125" width="80" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="⚡ API al núvol (ràpid, escalable)" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="885" y="150" width="310" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="🛡️ Fallback local (offline, CPU)" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="885" y="170" width="310" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="⚙️ Lògica de calibratge personalitzada" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#424242;" vertex="1" parent="1">
+          <mxGeometry x="885" y="190" width="310" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
